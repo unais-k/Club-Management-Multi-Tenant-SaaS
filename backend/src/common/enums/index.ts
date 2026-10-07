@@ -1,0 +1,10 @@
+export enum PricingModel {
+  SHIFT_BASED = 'SHIFT_BASED',
+  MEMBERSHIP_BASED = 'MEMBERSHIP_BASED',
+}
+
+export enum UserRole {
+  PLATFORM_ADMIN = 'PLATFORM_ADMIN',
+  CLUB_ADMIN = 'CLUB_ADMIN',
+  CONSUMER = 'CONSUMER',
+}

@@ -1,10 +1,11 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from './auth/auth.module.js';
 import { AvailabilityModule } from './availability/availability.module.js';
 import { BookingsModule } from './bookings/bookings.module.js';
+import { LoggerMiddleware } from './common/middleware/logger.middleware.js';
 import { CourtsModule } from './courts/courts.module.js';
 import { LocationsModule } from './locations/locations.module.js';
 import { MembershipsModule } from './memberships/memberships.module.js';
@@ -25,7 +26,7 @@ import { UsersModule } from './users/users.module.js';
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        type: 'mysql',
+        type: 'postgres',
         host: config.get<string>('DB_HOST'),
         port: Number(config.get('DB_PORT')),
         username: config.get<string>('DB_USERNAME'),
@@ -46,4 +47,9 @@ import { UsersModule } from './users/users.module.js';
     BookingsModule,
   ],
 })
-export class AppModule {}
+
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(LoggerMiddleware).forRoutes('*');
+  }
+}
