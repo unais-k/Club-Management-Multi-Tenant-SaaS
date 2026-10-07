@@ -1,10 +1,13 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import {
   Building2,
+  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
+  Clock3,
+  Coins,
   Eye,
   LoaderCircle,
   MapPin,
@@ -33,6 +36,52 @@ interface Tenant {
 interface TenantPage {
   data: Tenant[]
   meta: { total: number; page: number; limit: number; totalPages: number }
+}
+
+interface ScheduleRange {
+  dayOfWeek: number
+  startTime: string
+  endTime: string
+}
+
+interface UnavailablePeriod {
+  id: string
+  date: string
+  startTime: string
+  endTime: string
+  durationMinutes: number
+  reason: string | null
+}
+
+interface TenantOperations {
+  tenant: Tenant
+  dateRange: { today: string; through: string; days: number; dayOfWeek: number }
+  locations: Array<{
+    id: string
+    name: string
+    address: string
+    isActive: boolean
+    durations: number[]
+    openingHours: ScheduleRange[]
+    todayUnavailablePeriods: UnavailablePeriod[]
+    pricingShifts: Array<{ id: string; name: string; startTime: string; endTime: string }>
+    courts: Array<{
+      id: string
+      name: string
+      description: string | null
+      isActive: boolean
+      durations: number[]
+      usesLocationHours: boolean
+      openingHours: ScheduleRange[]
+      prices: Array<{
+        durationMinutes: number
+        shiftId: string | null
+        shiftName: string
+        price: number
+      }>
+    }>
+  }>
+  upcomingUnavailablePeriods: Array<UnavailablePeriod & { locationId: string; locationName: string }>
 }
 
 interface CreateTenantInput {
@@ -81,6 +130,42 @@ function formatDate(value: string) {
 
 function pricingLabel(value: PricingModel) {
   return value === 'SHIFT_BASED' ? 'Shift based' : 'Membership based'
+}
+
+function minuteOfDay(time: string) {
+  const [hour, minute] = time.split(':').map(Number)
+  return hour * 60 + minute
+}
+
+function timeOfDay(minutes: number) {
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+}
+
+function todayWindows(hours: ScheduleRange[], dayOfWeek: number, blocked: UnavailablePeriod[]) {
+  let ranges = hours
+    .filter((range) => range.dayOfWeek === dayOfWeek)
+    .map((range) => ({ start: minuteOfDay(range.startTime), end: minuteOfDay(range.endTime) }))
+
+  for (const period of blocked) {
+    const blockStart = minuteOfDay(period.startTime)
+    const blockEnd = minuteOfDay(period.endTime)
+    ranges = ranges.flatMap((range) => {
+      const overlapStart = Math.max(range.start, blockStart)
+      const overlapEnd = Math.min(range.end, blockEnd)
+      if (overlapStart >= overlapEnd) return [range]
+      const remainder: Array<{ start: number; end: number }> = []
+      if (range.start < overlapStart) remainder.push({ start: range.start, end: overlapStart })
+      if (overlapEnd < range.end) remainder.push({ start: overlapEnd, end: range.end })
+      return remainder
+    })
+  }
+
+  return ranges.map((range) => `${timeOfDay(range.start)}–${timeOfDay(range.end)}`)
+}
+
+function displayDate(date: string) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' })
+    .format(new Date(`${date}T00:00:00.000Z`))
 }
 
 function Modal({
@@ -162,6 +247,142 @@ function StatusBadge({ active }: { active: boolean }) {
   )
 }
 
+function ScheduleSummary({ data }: { data: TenantOperations }) {
+  return (
+    <div className="space-y-6 border-t border-border pt-5">
+      <section>
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-semibold"><Clock3 className="size-4 text-primary" />Today’s scheduled openings</h3>
+            <p className="mt-1 text-[11px] text-muted-foreground">{displayDate(data.dateRange.today)} · {data.tenant.timezone}</p>
+          </div>
+          <span className="mt-2 w-fit rounded-full bg-amber-500/10 px-2.5 py-1 text-[10px] font-medium text-amber-800 sm:mt-0">
+            Hours minus location closures · bookings not included
+          </span>
+        </div>
+
+        {data.locations.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-dashed border-border px-4 py-6 text-center text-xs text-muted-foreground">No locations have been added to this club yet.</p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {data.locations.map((location, index) => {
+              const locationWindows = location.isActive
+                ? todayWindows(
+                    location.openingHours,
+                    data.dateRange.dayOfWeek,
+                    location.todayUnavailablePeriods,
+                  )
+                : []
+              return (
+                <details key={location.id} open={index === 0} className="group rounded-xl border border-border bg-background">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-2 text-xs font-semibold"><MapPin className="size-3.5 text-muted-foreground" />{location.name}</span>
+                      <span className="mt-1 block truncate text-[10px] text-muted-foreground">{location.address}</span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <StatusBadge active={location.isActive} />
+                      <span className="text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
+                    </span>
+                  </summary>
+                  <div className="space-y-4 border-t border-border px-4 py-4">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Location open hours today</p>
+                      {locationWindows.length ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {locationWindows.map((window) => <span key={window} className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-medium text-emerald-800">{window}</span>)}
+                        </div>
+                      ) : <p className="mt-2 text-xs text-muted-foreground">{location.isActive ? 'Closed today' : 'Location inactive'}</p>}
+                    </div>
+
+                    {location.todayUnavailablePeriods.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Location closures today</p>
+                        <div className="mt-2 space-y-1.5">
+                          {location.todayUnavailablePeriods.map((period) => (
+                            <p key={period.id} className="flex flex-wrap items-center gap-x-2 text-[11px] text-amber-800">
+                              <span className="font-semibold">{period.startTime}–{period.endTime}</span>
+                              <span>{period.reason || 'Unavailable period'}</span>
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Court schedule windows</p>
+                      {location.courts.length === 0 ? (
+                        <p className="mt-2 text-xs text-muted-foreground">No courts have been added to this location.</p>
+                      ) : (
+                        <div className="mt-2 divide-y divide-border rounded-lg border border-border">
+                          {location.courts.map((court) => {
+                            const hours = court.usesLocationHours ? location.openingHours : court.openingHours
+                            const windows = location.isActive && court.isActive
+                              ? todayWindows(hours, data.dateRange.dayOfWeek, location.todayUnavailablePeriods)
+                              : []
+                            return (
+                              <div key={court.id} className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0">
+                                  <p className="text-xs font-medium">{court.name}<span className="ml-2 text-[10px] font-normal text-muted-foreground">{court.usesLocationHours ? 'Follows location hours' : 'Custom hours'}</span></p>
+                                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                    {court.durations.map((duration) => <span key={duration} className="rounded-md bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">{duration} min</span>)}
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5 sm:justify-end">
+                                  {!location.isActive || !court.isActive ? <span className="text-[10px] text-muted-foreground">Inactive</span> : windows.length ? windows.map((window) => <span key={window} className="rounded-md bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-800">{window}</span>) : <span className="text-[10px] text-muted-foreground">Closed today</span>}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Coins className="size-3.5" />Pricing setup</p>
+                      {data.tenant.pricingModel === 'SHIFT_BASED' ? (
+                        <>
+                          {location.pricingShifts.length > 0 && <p className="mt-2 text-[10px] text-muted-foreground">Shifts: {location.pricingShifts.map((shift) => `${shift.name} ${shift.startTime}–${shift.endTime}`).join(' · ')}</p>}
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {location.courts.flatMap((court) => court.prices.map((price) => (
+                              <span key={`${court.id}-${price.durationMinutes}-${price.shiftId ?? 'normal'}`} className="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground">
+                                {court.name} · {price.durationMinutes} min · {price.shiftName} · {price.price.toFixed(2)}
+                              </span>
+                            )))}
+                            {location.courts.every((court) => court.prices.length === 0) && <span className="text-[10px] text-muted-foreground">No court prices configured yet.</span>}
+                          </div>
+                        </>
+                      ) : <p className="mt-2 text-[10px] text-muted-foreground">This club uses membership-based pricing. Membership pricing details aren’t part of the current admin API.</p>}
+                    </div>
+                  </div>
+                </details>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h3 className="flex items-center gap-2 text-sm font-semibold"><CalendarDays className="size-4 text-primary" />Upcoming location closures</h3>
+        <p className="mt-1 text-[11px] text-muted-foreground">The next six days after today, through {displayDate(data.dateRange.through)}.</p>
+        {data.upcomingUnavailablePeriods.length ? (
+          <div className="mt-3 divide-y divide-border rounded-xl border border-border">
+            {data.upcomingUnavailablePeriods.map((period) => (
+              <div key={period.id} className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium">{period.locationName}</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">{period.reason || 'Unavailable period'}</p>
+                </div>
+                <p className="shrink-0 text-[11px] font-medium text-amber-800">{displayDate(period.date)} · {period.startTime}–{period.endTime}</p>
+              </div>
+            ))}
+          </div>
+        ) : <p className="mt-3 rounded-xl border border-dashed border-border px-4 py-5 text-center text-xs text-muted-foreground">No location closures are scheduled in the coming six days.</p>}
+      </section>
+    </div>
+  )
+}
+
 export function ClubsPage() {
   const [result, setResult] = useState<TenantPage>({
     data: [],
@@ -181,6 +402,10 @@ export function ClubsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [busyTenantId, setBusyTenantId] = useState('')
   const [notice, setNotice] = useState<{ text: string; isError: boolean } | null>(null)
+  const [operations, setOperations] = useState<TenantOperations | null>(null)
+  const [operationsLoading, setOperationsLoading] = useState(false)
+  const [operationsError, setOperationsError] = useState('')
+  const [operationsReload, setOperationsReload] = useState(0)
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -209,6 +434,32 @@ export function ClubsPage() {
 
     return () => controller.abort()
   }, [page, debouncedSearch, refreshKey])
+
+  const detailsTenantId = dialog?.kind === 'details' ? dialog.tenant.id : ''
+  useEffect(() => {
+    if (!detailsTenantId) {
+      setOperations(null)
+      setOperationsError('')
+      return
+    }
+
+    const controller = new AbortController()
+    setOperations(null)
+    setOperationsError('')
+    setOperationsLoading(true)
+    apiRequest<TenantOperations>(`/tenants/${detailsTenantId}/operations`, { signal: controller.signal })
+      .then(setOperations)
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setOperationsError(error instanceof Error ? error.message : 'Could not load this club’s schedule.')
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setOperationsLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [detailsTenantId, operationsReload])
 
   function openCreate() {
     setCreateForm(emptyCreateForm)
@@ -481,8 +732,8 @@ export function ClubsPage() {
       )}
 
       {dialog?.kind === 'details' && (
-        <Modal title={dialog.tenant.name} description="Club details" onClose={() => setDialog(null)} width="max-w-lg">
-          <div className="space-y-5 px-6 py-5">
+        <Modal title={dialog.tenant.name} description="Club details and current operations" onClose={() => setDialog(null)} width="max-w-4xl">
+          <div className="max-h-[calc(100vh-145px)] space-y-5 overflow-y-auto px-6 py-5">
             <div className="flex items-center justify-between rounded-xl bg-muted/45 p-4">
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Account status</p>
@@ -505,6 +756,18 @@ export function ClubsPage() {
                 </div>
               ))}
             </dl>
+            {operationsLoading && (
+              <div className="flex items-center justify-center gap-2 border-t border-border py-8 text-xs text-muted-foreground">
+                <LoaderCircle className="size-4 animate-spin" /> Loading locations, hours, and pricing…
+              </div>
+            )}
+            {operationsError && (
+              <div className="border-t border-border pt-5">
+                <ErrorMessage>{operationsError}</ErrorMessage>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => setOperationsReload((value) => value + 1)}>Retry</Button>
+              </div>
+            )}
+            {operations && <ScheduleSummary data={operations} />}
             <footer className="flex justify-end gap-2 border-t border-border pt-4">
               <Button variant="outline" onClick={() => openEdit(dialog.tenant)}><Pencil className="mr-2 size-4" />Edit club</Button>
               <Button onClick={() => setDialog(null)}><Check className="mr-2 size-4" />Done</Button>

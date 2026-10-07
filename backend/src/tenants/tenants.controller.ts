@@ -38,6 +38,14 @@ export class TenantsController {
     return this.tenantsService.findAll(query);
   }
 
+  @Get(':id/operations')
+  @ApiOperation({
+    summary: 'Get a club schedule and pricing overview for the platform admin',
+  })
+  getOperations(@Param('id', ParseUUIDPipe) id: string) {
+    return this.tenantsService.getOperations(id);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get one club' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
