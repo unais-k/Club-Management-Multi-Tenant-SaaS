@@ -9,7 +9,9 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../common/decorators/roles.decorator.js';
+import { UserRole } from '../common/enums/index.js';
 import { CreateTenantDto } from './dto/create-tenant.dto.js';
 import { ListTenantsQueryDto } from './dto/list-tenants-query.dto.js';
 import { UpdateTenantStatusDto } from './dto/update-tenant-status.dto.js';
@@ -18,8 +20,13 @@ import { TenantsService } from './tenants.service.js';
 
 @ApiTags('Tenants')
 @Controller('tenants')
+@ApiTags('Tenants')
+@ApiBearerAuth()
+@Roles(UserRole.PLATFORM_ADMIN)
+@Controller('tenants')
+
 export class TenantsController {
-  constructor(private readonly tenantsService: TenantsService) {}
+  constructor(private readonly tenantsService: TenantsService) { }
 
   @Post()
   @ApiOperation({ summary: 'Create a club and its first club admin' })
@@ -57,3 +64,4 @@ export class TenantsController {
     return this.tenantsService.setStatus(id, dto.isActive);
   }
 }
+
