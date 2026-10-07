@@ -74,3 +74,47 @@
 - Deactivation is a status flag (soft), never a delete, so history is preserved.
 
 **Key concepts:** DTO, Controller, Service, dependency injection, transactions, pipes.
+
+## Step 5: Authentication and Authorization
+**Goal:** Secure the API and enforce roles and tenant context.
+
+**Endpoints:** POST /auth/register, /auth/login, /auth/refresh, /auth/logout, GET /auth/me
+
+**Approach:**
+- Passwords: bcrypt
+- Access token: JWT, 15 min. Refresh token: JWT, 7 days, only a SHA-256 hash is stored
+- Refresh rotation: reuse of an old refresh token wipes the session
+- Global JwtAuthGuard (secure by default, `@Public()` opts out) + RolesGuard (`@Roles()`)
+- Guard loads the user from the DB each request: deactivated users/clubs are blocked immediately and the role is always from the DB
+- `@ClubId()` decorator supplies the tenant id from the authenticated user, never from input
+- Login uses `clubSlug` because email is unique per club; platform admin logs in without a slug
+- Register is consumers-only; the role is fixed on the server (extra body fields are rejected)
+- Platform admin seeded on startup from env variables
+
+**Known limitations:** one active session per user (a new login replaces the refresh token); access tokens stay valid until expiry after logout (the DB user check still blocks deactivated users); no rate limiting on login.
+
+
+## Step 6: Locations
+**Goal:** Let club admins manage locations, weekly opening hours, booking durations and unavailable periods, with strict tenant isolation.
+
+**Tables:** locations, location_opening_hours, location_unavailable_periods (all carry club_id)
+
+**Endpoints:** POST/GET/GET:id/PUT/DELETE /locations, PUT /locations/:id/opening-hours, POST/GET/DELETE /locations/:id/unavailable-periods
+
+**Tenant isolation:**
+- Every service method receives `clubId` from `@ClubId()` (taken from the authenticated user)
+- `getOwned(clubId, id)` filters by both id and club_id; other clubs' ids return 404
+- Verified: Club B cannot read, update or delete Club A's locations
+
+**Decisions:**
+- Times stored as minutes from midnight (API uses HH:mm); "24:00" allowed as closing time; overnight periods not supported (split across two days)
+- dayOfWeek: 0 = Sunday ... 6 = Saturday; closed day = no rows; multiple periods = multiple rows
+- Opening hours replaced as a whole set inside a transaction; overlaps and invalid ranges rejected
+- Database CHECK constraints guard the time ranges
+- Durations stored as an integer array on the location
+- Unavailable periods on the same date cannot overlap (409); duration is derived (end - start)
+- DELETE is a soft delete so booking history survives; name unique per club among non-deleted rows
+- Consumers only see active locations
+- All times are in the club's timezone
+
+**Known limitations:** unavailable periods can be created for past dates; the Step 7 courts work will enforce court hours and durations against the location and will block location edits that would break existing courts.
