@@ -141,3 +141,28 @@
 - Court name unique per location among non-deleted courts
 
 **Known limitation:** deleting a court does not yet check for future bookings (added when bookings exist).
+
+
+## Step 8: Pricing, shift-based
+**Goal:** Let SHIFT_BASED clubs define pricing shifts and per-court prices, and calculate booking prices.
+
+**Tables:** pricing_shifts, court_prices (both carry club_id)
+
+**Endpoints:** POST /pricing/shifts, GET /pricing/locations/:locationId/shifts, PUT/DELETE /pricing/shifts/:id, PUT/GET /pricing/courts/:courtId, GET /pricing/quote
+
+**Rules and validation:**
+- Only SHIFT_BASED clubs can create shifts or set court prices (409 otherwise)
+- Shifts apply every day; no overlaps within a location; the names "Normal" and "Default" are reserved
+- Time outside any shift uses the Normal price (court_prices row with shiftId NULL)
+- Court prices: duration must be offered by the court, shift must belong to the same location, no duplicates, price >= 0 with max 2 decimals; DB unique indexes (two partial indexes to handle NULL) and CHECK constraints back this up
+- Price list is replaced as a whole in one transaction
+- Deleting a shift removes its prices; that time falls back to Normal
+
+**Booking crossing two shifts: prorated by minutes.**
+Each part of the booking is charged at the price of its own shift for the full duration, scaled by minutes. Example: 08:30-09:30 (60 min), Morning Peak $20, Normal $15 = $10.00 + $7.50 = $17.50. Calculated in cents to avoid float errors. A missing price returns 422 instead of a free booking.
+
+**Design:** calculation is a pure function (`pricing-calculator.ts`) with unit tests (6 cases), reused by the booking flow. Bookings will store the final price, so later price changes do not alter existing bookings.
+
+**Tenant isolation:** every lookup filters by club_id; other clubs get 404 (tested).
+
+**Known limitations:** no per-day shifts (weekday vs weekend); single currency; overnight bookings not supported; the quote does not check availability (done in the booking step).
