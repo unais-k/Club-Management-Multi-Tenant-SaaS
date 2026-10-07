@@ -118,3 +118,26 @@
 - All times are in the club's timezone
 
 **Known limitations:** unavailable periods can be created for past dates; the Step 7 courts work will enforce court hours and durations against the location and will block location edits that would break existing courts.
+
+## Step 7: Courts
+**Goal:** Manage courts per location with their own availability, while enforcing location rules.
+
+**Tables:** courts, court_opening_hours (both carry club_id)
+
+**Endpoints:** POST/GET /locations/:locationId/courts, GET/PUT/DELETE /courts/:id, PUT /courts/:id/opening-hours
+
+**Rules implemented:**
+- Rule 2: every court period must fit inside one merged location period for that day; otherwise 400 with a message naming the day and time
+- Rule 4: a court can have its own hours (e.g. 06-12 and 14-23); `useCustomHours` flag; days not listed are closed for that court; otherwise it inherits the location hours
+- Rule 5: a court's durations are NULL (all of the location's) or a subset; any duration not offered by the location is rejected at the service level (400)
+- Location edits that would leave a court outside its hours or remove a duration it uses are blocked with 409 naming the court
+- Deleting a location soft-deletes its courts in one transaction
+
+**Tenant isolation:** every court lookup filters by id AND club_id, and the parent location is verified for the same club; other clubs get 404 (tested).
+
+**Decisions:**
+- Custom court hours fully replace the location schedule; touching location periods are merged before comparing
+- Consumers only see active courts in active locations
+- Court name unique per location among non-deleted courts
+
+**Known limitation:** deleting a court does not yet check for future bookings (added when bookings exist).

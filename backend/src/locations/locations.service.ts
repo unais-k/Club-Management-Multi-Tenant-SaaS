@@ -8,12 +8,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, ILike, Repository } from 'typeorm';
 import { UserRole } from '../common/enums/index.js';
 import { isUniqueViolation } from '../common/helpers/db-errors.js';
+import { findOutsideHours } from '../common/helpers/schedule.js';
 import {
   type MinuteRange,
   hasOverlap,
   toHHmm,
   toMinutes,
 } from '../common/helpers/time.js';
+import { Court } from '../courts/entities/court.entity.js';
 import { CreateLocationDto } from './dto/create-location.dto.js';
 import { CreateUnavailablePeriodDto } from './dto/create-unavailable-period.dto.js';
 import { ListLocationsQueryDto } from './dto/list-locations-query.dto.js';
@@ -30,8 +32,10 @@ export class LocationsService {
     private readonly locationRepo: Repository<Location>,
     @InjectRepository(LocationUnavailablePeriod)
     private readonly periodRepo: Repository<LocationUnavailablePeriod>,
+    @InjectRepository(Court)
+    private readonly courtRepo: Repository<Court>,
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
   // ---------- Locations ----------
 
@@ -96,8 +100,25 @@ export class LocationsService {
       location.name = name;
     }
     if (dto.address !== undefined) location.address = dto.address.trim();
-    if (dto.details !== undefined) location.details = dto.details.trim() || null;
-    if (dto.durations !== undefined) location.durations = this.sortDurations(dto.durations);
+    if (dto.details !== undefined)
+      location.details = dto.details.trim() || null;
+    if (dto.durations !== undefined) {
+      const durations = this.sortDurations(dto.durations);
+      const courts = await this.courtRepo.find({
+        where: { clubId, locationId: id },
+      });
+      const blocking = courts.filter((c) =>
+        c.durations?.some((d) => !durations.includes(d)),
+      );
+      if (blocking.length > 0) {
+        throw new ConflictException(
+          `These courts still use durations you are removing: ${blocking
+            .map((c) => c.name)
+            .join(', ')}. Update those courts first.`,
+        );
+      }
+      location.durations = durations;
+    }
     if (dto.isActive !== undefined) location.isActive = dto.isActive;
 
     try {
@@ -110,7 +131,10 @@ export class LocationsService {
 
   async remove(clubId: string, id: string) {
     await this.getOwned(clubId, id); // 404 if it is not ours
-    await this.locationRepo.softDelete({ id, clubId });
+    await this.dataSource.transaction(async (manager) => {
+      await manager.softDelete(Court, { clubId, locationId: id });
+      await manager.softDelete(Location, { id, clubId });
+    });
   }
 
   // ---------- Opening hours ----------
@@ -127,7 +151,10 @@ export class LocationsService {
           `Day ${h.dayOfWeek}: closeTime must be after openTime (${h.openTime} - ${h.closeTime})`,
         );
       }
-      byDay.set(h.dayOfWeek, [...(byDay.get(h.dayOfWeek) ?? []), { start, end }]);
+      byDay.set(h.dayOfWeek, [
+        ...(byDay.get(h.dayOfWeek) ?? []),
+        { start, end },
+      ]);
       return {
         clubId,
         locationId: location.id,
@@ -143,6 +170,20 @@ export class LocationsService {
       }
     }
 
+    // Courts with their own hours must still fit inside the new location hours
+    const customCourts = await this.courtRepo.find({
+      where: { clubId, locationId: location.id, useCustomHours: true },
+      relations: { openingHours: true },
+    });
+    const problems = customCourts.flatMap((c) =>
+      findOutsideHours(c.openingHours, rows).map((p) => `${c.name}: ${p}`),
+    );
+    if (problems.length > 0) {
+      throw new ConflictException(
+        `These courts would fall outside the new opening hours, update them first: ${problems.join('; ')}`,
+      );
+    }
+
     // Replace the whole schedule atomically
     await this.dataSource.transaction(async (manager) => {
       await manager.delete(LocationOpeningHour, { locationId: location.id });
@@ -154,12 +195,19 @@ export class LocationsService {
 
   // ---------- Unavailable periods ----------
 
-  async addUnavailablePeriod(clubId: string, id: string, dto: CreateUnavailablePeriodDto) {
+  async addUnavailablePeriod(
+    clubId: string,
+    id: string,
+    dto: CreateUnavailablePeriodDto,
+  ) {
     const location = await this.getOwned(clubId, id);
 
     // Reject impossible dates such as 2026-02-30
     const parsed = new Date(`${dto.date}T00:00:00Z`);
-    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== dto.date) {
+    if (
+      Number.isNaN(parsed.getTime()) ||
+      parsed.toISOString().slice(0, 10) !== dto.date
+    ) {
       throw new BadRequestException(`"${dto.date}" is not a valid date`);
     }
 
@@ -174,9 +222,14 @@ export class LocationsService {
       locationId: location.id,
       date: dto.date,
     });
-    const ranges = sameDay.map((p) => ({ start: p.startMinute, end: p.endMinute }));
+    const ranges = sameDay.map((p) => ({
+      start: p.startMinute,
+      end: p.endMinute,
+    }));
     if (hasOverlap([...ranges, { start, end }])) {
-      throw new ConflictException('This overlaps an existing unavailable period on that date');
+      throw new ConflictException(
+        'This overlaps an existing unavailable period on that date',
+      );
     }
 
     const period = await this.periodRepo.save(
@@ -208,7 +261,8 @@ export class LocationsService {
       clubId,
       locationId: location.id,
     });
-    if (!result.affected) throw new NotFoundException('Unavailable period not found');
+    if (!result.affected)
+      throw new NotFoundException('Unavailable period not found');
   }
 
   // ---------- Helpers ----------
@@ -223,13 +277,19 @@ export class LocationsService {
     return location;
   }
 
-  private async assertNameFree(clubId: string, name: string, exceptId?: string) {
+  private async assertNameFree(
+    clubId: string,
+    name: string,
+    exceptId?: string,
+  ) {
     const clash = await this.locationRepo.findOneBy({ clubId, name });
     if (clash && clash.id !== exceptId) throw this.nameTaken(name);
   }
 
   private nameTaken(name: string) {
-    return new ConflictException(`A location named "${name}" already exists in this club`);
+    return new ConflictException(
+      `A location named "${name}" already exists in this club`,
+    );
   }
 
   private sortDurations(durations: number[]): number[] {
@@ -245,7 +305,9 @@ export class LocationsService {
       durations: l.durations,
       isActive: l.isActive,
       openingHours: (l.openingHours ?? [])
-        .sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.startMinute - b.startMinute)
+        .sort(
+          (a, b) => a.dayOfWeek - b.dayOfWeek || a.startMinute - b.startMinute,
+        )
         .map((h) => ({
           dayOfWeek: h.dayOfWeek,
           openTime: toHHmm(h.startMinute),
