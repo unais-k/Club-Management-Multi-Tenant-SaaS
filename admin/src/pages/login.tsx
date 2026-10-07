@@ -38,8 +38,8 @@ export function LoginPage() {
   return (
     <main className="grid min-h-screen bg-background lg:grid-cols-[minmax(0,1fr)_minmax(430px,0.92fr)]">
       <section className="relative hidden overflow-hidden bg-[#17152b] px-12 py-10 text-white lg:flex lg:flex-col xl:px-20">
-        <div className="absolute -left-24 top-1/4 size-[420px] rounded-full bg-violet-500/20 blur-[100px]" />
-        <div className="absolute -bottom-32 right-0 size-[460px] rounded-full bg-indigo-400/15 blur-[110px]" />
+        <div className="absolute -left-24 top-1/4 size-105 rounded-full bg-violet-500/20 blur-[100px]" />
+        <div className="absolute -bottom-32 right-0 size-115 rounded-full bg-indigo-400/15 blur-[110px]" />
         <div className="relative flex items-center gap-3">
           <span className="flex size-10 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
             <Grid2X2 className="size-5" />
@@ -65,7 +65,7 @@ export function LoginPage() {
               ['Locations', 'Set schedules'],
               ['Courts', 'Organize spaces'],
             ].map(([label, hint]) => (
-              <div key={label} className="rounded-xl border border-white/10 bg-white/[0.04] p-3.5">
+              <div key={label} className="rounded-xl border border-white/10 bg-white/4 p-3.5">
                 <p className="text-sm font-medium">{label}</p>
                 <p className="mt-1 text-[10px] text-white/45">{hint}</p>
               </div>
@@ -76,7 +76,7 @@ export function LoginPage() {
       </section>
 
       <section className="flex min-h-screen items-center justify-center px-5 py-12 sm:px-10">
-        <div className="w-full max-w-[410px]">
+        <div className="w-full max-w-102.5">
           <div className="mb-10 flex items-center gap-3 lg:hidden">
             <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
               <Grid2X2 className="size-5" />

@@ -98,7 +98,7 @@ function Modal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/45 p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-60 flex items-center justify-center overflow-y-auto bg-black/45 p-4 backdrop-blur-[2px]"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
@@ -287,7 +287,7 @@ export function ClubsPage() {
       <section className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div className="flex items-center gap-3">
           <span className="flex size-10 items-center justify-center rounded-xl bg-primary/5 text-primary">
-            <Building2 className="size-[18px]" />
+            <Building2 className="size-4.5" />
           </span>
           <div>
             <p className="text-sm font-semibold">Club directory</p>
@@ -312,7 +312,7 @@ export function ClubsPage() {
             <h3 className="text-sm font-semibold">All clubs</h3>
             <p className="mt-1 text-xs text-muted-foreground">Search and manage platform tenants.</p>
           </div>
-          <label className="relative block w-full sm:max-w-[280px]">
+          <label className="relative block w-full sm:max-w-70">
             <Search aria-hidden="true" className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
               aria-label="Search clubs by name"
@@ -331,7 +331,7 @@ export function ClubsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] border-collapse text-left">
+            <table className="w-full min-w-205 border-collapse text-left">
               <thead>
                 <tr className="border-b border-border bg-muted/30 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   <th className="px-5 py-3">Club</th>
