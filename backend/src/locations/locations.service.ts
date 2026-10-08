@@ -11,6 +11,10 @@ import { UserRole } from '../common/enums/index.js';
 import { isUniqueViolation } from '../common/helpers/db-errors.js';
 import { findOutsideHours } from '../common/helpers/schedule.js';
 import {
+  durationsWithoutWeeklySlots,
+  weeklySlotError,
+} from '../availability/weekly-schedule-validation.js';
+import {
   type MinuteRange,
   hasOverlap,
   toHHmm,
@@ -106,8 +110,12 @@ export class LocationsService {
       location.details = dto.details.trim() || null;
     if (dto.durations !== undefined) {
       const durations = this.sortDurations(dto.durations);
+      const durationsChanged =
+        durations.length !== location.durations.length ||
+        durations.some((duration, index) => duration !== location.durations[index]);
       const courts = await this.courtRepo.find({
         where: { clubId, locationId: id },
+        relations: { openingHours: true },
       });
       const blocking = courts.filter((c) =>
         c.durations?.some((d) => !durations.includes(d)),
@@ -120,6 +128,20 @@ export class LocationsService {
         );
       }
       location.durations = durations;
+      if (durationsChanged && location.openingHours?.length) {
+        this.assertWeeklySlots(
+          'Location opening hours',
+          location.openingHours,
+          durations,
+          durations,
+        );
+        const activeCourts = courts.filter((court) => court.isActive);
+        this.assertActiveCourtSchedules(
+          activeCourts,
+          location.openingHours,
+          durations,
+        );
+      }
     }
     if (dto.isActive !== undefined) location.isActive = dto.isActive;
 
@@ -181,10 +203,18 @@ export class LocationsService {
     }
 
     // Courts with their own hours must still fit inside the new location hours
-    const customCourts = await this.courtRepo.find({
-      where: { clubId, locationId: location.id, useCustomHours: true },
+    const activeCourts = await this.courtRepo.find({
+      where: { clubId, locationId: location.id, isActive: true },
       relations: { openingHours: true },
     });
+    this.assertWeeklySlots(
+      'Location opening hours',
+      rows,
+      location.durations,
+      location.durations,
+    );
+    this.assertActiveCourtSchedules(activeCourts, rows, location.durations);
+    const customCourts = activeCourts.filter((court) => court.useCustomHours);
     const problems = customCourts.flatMap((c) =>
       findOutsideHours(c.openingHours, rows).map((p) => `${c.name}: ${p}`),
     );
@@ -316,6 +346,55 @@ export class LocationsService {
 
   private sortDurations(durations: number[]): number[] {
     return [...durations].sort((a, b) => a - b);
+  }
+
+  private assertWeeklySlots(
+    subject: string,
+    locationHours: readonly {
+      dayOfWeek: number;
+      startMinute: number;
+      endMinute: number;
+    }[],
+    durations: number[],
+    gridDurations: number[],
+    courtHours:
+      | readonly { dayOfWeek: number; startMinute: number; endMinute: number }[]
+      | null = null,
+  ) {
+    const missing = durationsWithoutWeeklySlots(
+      locationHours,
+      durations,
+      gridDurations,
+      courtHours,
+    );
+    if (missing.length)
+      throw new BadRequestException(weeklySlotError(subject, missing));
+  }
+
+  private assertActiveCourtSchedules(
+    courts: Court[],
+    locationHours: readonly {
+      dayOfWeek: number;
+      startMinute: number;
+      endMinute: number;
+    }[],
+    locationDurations: number[],
+  ) {
+    for (const court of courts) {
+      const offered = court.durations ?? locationDurations;
+      const courtHours = court.useCustomHours ? court.openingHours : null;
+      const missing = durationsWithoutWeeklySlots(
+        locationHours,
+        offered,
+        locationDurations,
+        courtHours,
+      );
+      if (missing.length) {
+        throw new ConflictException(
+          weeklySlotError(`Court "${court.name}"`, missing),
+        );
+      }
+    }
   }
 
   private toResponse(l: Location) {

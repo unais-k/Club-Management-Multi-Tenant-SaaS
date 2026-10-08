@@ -10,6 +10,10 @@ import { UserRole } from '../common/enums/index.js';
 import { isUniqueViolation } from '../common/helpers/db-errors.js';
 import { findOutsideHours } from '../common/helpers/schedule.js';
 import {
+  durationsWithoutWeeklySlots,
+  weeklySlotError,
+} from '../availability/weekly-schedule-validation.js';
+import {
   type MinuteRange,
   hasOverlap,
   toHHmm,
@@ -27,27 +31,35 @@ import { BookingsService } from '../bookings/bookings.service.js';
 export class CourtsService {
   constructor(
     @InjectRepository(Court) private readonly courtRepo: Repository<Court>,
-    @InjectRepository(Location) private readonly locationRepo: Repository<Location>,
+    @InjectRepository(Location)
+    private readonly locationRepo: Repository<Location>,
     private readonly dataSource: DataSource,
     private readonly bookingsService: BookingsService,
-  ) { }
+  ) {}
 
   async create(clubId: string, locationId: string, dto: CreateCourtDto) {
     const location = await this.getLocation(clubId, locationId);
     const name = dto.name.trim();
     await this.assertNameFree(clubId, locationId, name);
     const durations = this.resolveDurations(location, dto.durations);
+    const newCourt = this.courtRepo.create({
+      clubId,
+      locationId,
+      name,
+      description: dto.description?.trim() || null,
+      durations,
+    });
+    if (location.openingHours?.length) {
+      this.assertWeeklySlots(
+        newCourt,
+        location,
+        newCourt.durations ?? location.durations,
+        null,
+      );
+    }
 
     try {
-      const court = await this.courtRepo.save(
-        this.courtRepo.create({
-          clubId,
-          locationId,
-          name,
-          description: dto.description?.trim() || null,
-          durations,
-        }),
-      );
+      const court = await this.courtRepo.save(newCourt);
       court.openingHours = [];
       return this.toResponse(court, location);
     } catch (err) {
@@ -82,17 +94,35 @@ export class CourtsService {
   async update(clubId: string, id: string, dto: UpdateCourtDto) {
     const court = await this.getOwned(clubId, id);
     const location = await this.getLocation(clubId, court.locationId);
+    const previousDurations = court.durations ?? location.durations;
+    const wasActive = court.isActive;
 
     if (dto.name !== undefined) {
       const name = dto.name.trim();
       await this.assertNameFree(clubId, court.locationId, name, id);
       court.name = name;
     }
-    if (dto.description !== undefined) court.description = dto.description.trim() || null;
+    if (dto.description !== undefined)
+      court.description = dto.description.trim() || null;
     if (dto.durations !== undefined) {
       court.durations = this.resolveDurations(location, dto.durations);
     }
     if (dto.isActive !== undefined) court.isActive = dto.isActive;
+
+    const durationsChanged =
+      (court.durations ?? location.durations).length !== previousDurations.length ||
+      (court.durations ?? location.durations).some(
+        (duration, index) => duration !== previousDurations[index],
+      );
+    const activating = !wasActive && court.isActive;
+    if ((durationsChanged || activating) && court.isActive && location.openingHours?.length) {
+      this.assertWeeklySlots(
+        court,
+        location,
+        court.durations ?? location.durations,
+        court.useCustomHours ? court.openingHours : null,
+      );
+    }
 
     try {
       return this.toResponse(await this.courtRepo.save(court), location);
@@ -105,7 +135,9 @@ export class CourtsService {
   async remove(clubId: string, id: string) {
     await this.getOwned(clubId, id); // 404 if it is not ours
 
-    const upcoming = await this.bookingsService.countUpcoming(clubId, { courtId: id });
+    const upcoming = await this.bookingsService.countUpcoming(clubId, {
+      courtId: id,
+    });
     if (upcoming > 0) {
       throw new ConflictException(
         `This court has ${upcoming} upcoming booking(s). Cancel them first.`,
@@ -116,7 +148,11 @@ export class CourtsService {
 
   // ---------- Court availability (opening hours) ----------
 
-  async setOpeningHours(clubId: string, id: string, dto: SetCourtOpeningHoursDto) {
+  async setOpeningHours(
+    clubId: string,
+    id: string,
+    dto: SetCourtOpeningHoursDto,
+  ) {
     const court = await this.getOwned(clubId, id);
     const location = await this.getLocation(clubId, court.locationId);
 
@@ -127,16 +163,30 @@ export class CourtsService {
           'Do not send openingHours when useLocationHours is true',
         );
       }
+      if (location.openingHours?.length) {
+        this.assertWeeklySlots(
+          court,
+          location,
+          court.durations ?? location.durations,
+          null,
+        );
+      }
       await this.dataSource.transaction(async (manager) => {
         await manager.delete(CourtOpeningHour, { courtId: court.id });
-        await manager.update(Court, { id: court.id, clubId }, { useCustomHours: false });
+        await manager.update(
+          Court,
+          { id: court.id, clubId },
+          { useCustomHours: false },
+        );
       });
       return this.toResponse(await this.getOwned(clubId, id), location);
     }
 
     // Option 2: custom hours
     if (!dto.openingHours) {
-      throw new BadRequestException('openingHours is required when useLocationHours is false');
+      throw new BadRequestException(
+        'openingHours is required when useLocationHours is false',
+      );
     }
 
     const byDay = new Map<number, MinuteRange[]>();
@@ -148,7 +198,10 @@ export class CourtsService {
           `Day ${h.dayOfWeek}: closeTime must be after openTime (${h.openTime} - ${h.closeTime})`,
         );
       }
-      byDay.set(h.dayOfWeek, [...(byDay.get(h.dayOfWeek) ?? []), { start, end }]);
+      byDay.set(h.dayOfWeek, [
+        ...(byDay.get(h.dayOfWeek) ?? []),
+        { start, end },
+      ]);
       return {
         clubId,
         courtId: court.id,
@@ -160,7 +213,9 @@ export class CourtsService {
 
     for (const [day, ranges] of byDay) {
       if (hasOverlap(ranges)) {
-        throw new BadRequestException(`Day ${day}: court opening periods overlap`);
+        throw new BadRequestException(
+          `Day ${day}: court opening periods overlap`,
+        );
       }
     }
 
@@ -172,10 +227,21 @@ export class CourtsService {
       );
     }
 
+    this.assertWeeklySlots(
+      court,
+      location,
+      court.durations ?? location.durations,
+      rows,
+    );
+
     await this.dataSource.transaction(async (manager) => {
       await manager.delete(CourtOpeningHour, { courtId: court.id });
       if (rows.length > 0) await manager.insert(CourtOpeningHour, rows);
-      await manager.update(Court, { id: court.id, clubId }, { useCustomHours: true });
+      await manager.update(
+        Court,
+        { id: court.id, clubId },
+        { useCustomHours: true },
+      );
     });
 
     return this.toResponse(await this.getOwned(clubId, id), location);
@@ -194,7 +260,11 @@ export class CourtsService {
   }
 
   // Tenant check: the location must belong to this club (consumers: active only)
-  private async getLocation(clubId: string, id: string, role?: UserRole): Promise<Location> {
+  private async getLocation(
+    clubId: string,
+    id: string,
+    role?: UserRole,
+  ): Promise<Location> {
     const location = await this.locationRepo.findOne({
       where: { id, clubId },
       relations: { openingHours: true },
@@ -206,16 +276,40 @@ export class CourtsService {
   }
 
   // Rule 5: a court can only offer durations its location offers
-  private resolveDurations(location: Location, durations?: number[] | null): number[] | null {
+  private resolveDurations(
+    location: Location,
+    durations?: number[] | null,
+  ): number[] | null {
     if (!durations) return null; // inherit everything from the location
     const invalid = durations.filter((d) => !location.durations.includes(d));
     if (invalid.length > 0) {
       throw new BadRequestException(
         `Duration(s) ${invalid.join(', ')} are not offered by the location. ` +
-        `The location offers: ${location.durations.join(', ')}`,
+          `The location offers: ${location.durations.join(', ')}`,
       );
     }
     return [...durations].sort((a, b) => a - b);
+  }
+
+  private assertWeeklySlots(
+    court: Court,
+    location: Location,
+    durations: number[],
+    courtHours:
+      | readonly { dayOfWeek: number; startMinute: number; endMinute: number }[]
+      | null,
+  ) {
+    const missing = durationsWithoutWeeklySlots(
+      location.openingHours ?? [],
+      durations,
+      location.durations,
+      courtHours,
+    );
+    if (missing.length) {
+      throw new BadRequestException(
+        weeklySlotError(`Court "${court.name}"`, missing),
+      );
+    }
   }
 
   private async assertNameFree(
@@ -229,7 +323,9 @@ export class CourtsService {
   }
 
   private nameTaken(name: string) {
-    return new ConflictException(`A court named "${name}" already exists in this location`);
+    return new ConflictException(
+      `A court named "${name}" already exists in this location`,
+    );
   }
 
   private toResponse(court: Court, location: Location) {
@@ -247,7 +343,9 @@ export class CourtsService {
       durations: court.durations ?? location.durations, // what can be booked
       customDurations: court.durations, // null = follows the location
       openingHours: [...hours]
-        .sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.startMinute - b.startMinute)
+        .sort(
+          (a, b) => a.dayOfWeek - b.dayOfWeek || a.startMinute - b.startMinute,
+        )
         .map((h) => ({
           dayOfWeek: h.dayOfWeek,
           openTime: toHHmm(h.startMinute),
