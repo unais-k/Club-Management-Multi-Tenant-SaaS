@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import {
-  Bell,
   CalendarDays,
   Clock3,
   Building2,
@@ -11,7 +10,6 @@ import {
   MapPin,
   Menu,
   Coins,
-  Search,
   Settings2,
   X,
 } from 'lucide-react'
@@ -27,6 +25,7 @@ import { MembershipsPage } from '@/pages/memberships'
 import { OverviewPage } from '@/pages/overview'
 import { BookingsPage } from '@/pages/bookings'
 import { AvailabilityPage } from '@/pages/availability'
+import { SettingsPage } from '@/pages/settings'
 
 const navigation = [
   { label: 'Overview', path: '/overview', icon: LayoutDashboard },
@@ -74,27 +73,9 @@ const pageCopy: Record<string, { title: string; description: string }> = {
     description: 'Review and manage your club bookings.',
   },
   '/settings': {
-    title: 'Settings',
-    description: 'Configure your workspace preferences.',
+    title: 'Account and workspace',
+    description: 'Review your administrator account and workspace details.',
   },
-}
-
-function PlaceholderPage({ title, description }: { title: string; description: string }) {
-  return (
-    <section className="rounded-2xl border border-border bg-card p-8 shadow-sm sm:p-10">
-      <div className="mb-5 flex size-12 items-center justify-center rounded-xl bg-primary/5 text-primary">
-        <LayoutDashboard aria-hidden="true" className="size-5" />
-      </div>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-        Admin workspace
-      </p>
-      <h2 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h2>
-      <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>
-      <div className="mt-8 rounded-xl border border-dashed border-border bg-muted/30 px-5 py-4 text-sm text-muted-foreground">
-        This section is ready for its management screen.
-      </div>
-    </section>
-  )
 }
 
 function App() {
@@ -224,15 +205,9 @@ function App() {
             </div>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
-            <Button variant="ghost" size="icon" aria-label="Search">
-              <Search />
-            </Button>
-            <Button variant="ghost" size="icon" aria-label="Notifications">
-              <Bell />
-            </Button>
             <div className="ml-2 hidden h-8 items-center gap-2 border-l border-border pl-4 sm:flex">
               <span className="size-2 rounded-full bg-emerald-500" />
-              <span className="text-xs text-muted-foreground">All systems ready</span>
+              <span className="text-xs text-muted-foreground">Admin workspace</span>
             </div>
           </div>
         </header>
@@ -252,7 +227,7 @@ function App() {
             <Route path="/memberships" element={<MembershipsPage />} />
             <Route path="/availability" element={<AvailabilityPage />} />
             <Route path="/bookings" element={<BookingsPage />} />
-            <Route path="/settings" element={<PlaceholderPage {...pageCopy['/settings']} />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to={homePath} replace />} />
           </Routes>
         </main>

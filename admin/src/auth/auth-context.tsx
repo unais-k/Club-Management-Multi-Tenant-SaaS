@@ -99,8 +99,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     saveSessionTokens(result.accessToken, result.refreshToken)
-    setUser(result.user)
-    return result.user
+    try {
+      const profile = await apiRequest<AdminUser>('/auth/me')
+      setUser(profile)
+      return profile
+    } catch (error) {
+      clearSessionTokens()
+      throw error
+    }
   }, [])
 
   const logout = useCallback(async () => {
