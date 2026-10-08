@@ -1,10 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
   ArrowRight,
   CalendarDays,
-  Check,
   CircleHelp,
   Clock3,
   Eye,
@@ -17,6 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LocationsView } from "@/components/consumer/locations-view";
 import { useAuthStore } from "@/store/auth-store";
 
 type AuthMode = "login" | "register";
@@ -66,9 +66,47 @@ export default function Home() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [restoringSession, setRestoringSession] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const setSession = useAuthStore((state) => state.setSession);
   const clearSession = useAuthStore((state) => state.clearSession);
+
+  useEffect(() => {
+    let active = true;
+    const saved = useAuthStore.getState();
+    if (!saved.accessToken || !saved.refreshToken) {
+      setRestoringSession(false);
+      return;
+    }
+
+    async function restoreSession() {
+      try {
+        let currentUser: Profile;
+        try {
+          currentUser = await request<Profile>("/auth/me", {
+            headers: { Authorization: `Bearer ${saved.accessToken}` },
+          });
+        } catch {
+          const refreshed = await request<AuthResponse>("/auth/refresh", {
+            method: "POST",
+            body: JSON.stringify({ refreshToken: saved.refreshToken }),
+          });
+          setSession(refreshed.accessToken, refreshed.refreshToken, refreshed.user);
+          currentUser = await request<Profile>("/auth/me", {
+            headers: { Authorization: `Bearer ${refreshed.accessToken}` },
+          });
+        }
+        if (active) setProfile(currentUser);
+      } catch {
+        if (active) clearSession();
+      } finally {
+        if (active) setRestoringSession(false);
+      }
+    }
+
+    void restoreSession();
+    return () => { active = false; };
+  }, [clearSession, setSession]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -122,38 +160,11 @@ export default function Home() {
   }
 
   if (profile) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f6f8f5] px-5 py-10">
-        <section className="w-full max-w-lg rounded-3xl border border-[#e6eae4] bg-white p-8 shadow-[0_20px_80px_-40px_rgba(24,58,43,.25)] sm:p-10">
-          <div className="mb-8 flex size-14 items-center justify-center rounded-2xl bg-[#e9f3ec] text-[#24704d]">
-            <Check size={26} />
-          </div>
-          <p className="mb-2 text-sm font-semibold uppercase tracking-[.16em] text-[#41815e]">
-            You’re signed in
-          </p>
-          <h1 className="font-heading text-3xl font-semibold tracking-tight text-[#17251c]">
-            Welcome, {profile.name.split(" ")[0]}.
-          </h1>
-          <p className="mt-3 text-sm leading-6 text-[#69766d]">
-            Your account is connected to {profile.club?.name ?? "your club"}.
-            The booking experience will be added in the next step.
-          </p>
-          <div className="mt-7 rounded-2xl bg-[#f7f9f6] p-4 text-sm text-[#46544a]">
-            <p className="font-medium">{profile.email}</p>
-            <p className="mt-1 text-[#849087]">
-              Club · {profile.club?.slug ?? "—"}
-            </p>
-          </div>
-          <Button
-            onClick={handleSignOut}
-            variant="outline"
-            className="mt-7 h-11 w-full rounded-xl"
-          >
-            Sign out
-          </Button>
-        </section>
-      </main>
-    );
+    return <LocationsView profile={profile} onSignOut={handleSignOut} />;
+  }
+
+  if (restoringSession) {
+    return <main className="flex min-h-screen items-center justify-center bg-[#f6f8f5] text-sm text-[#738077]">Restoring your session…</main>;
   }
 
   return (
@@ -211,7 +222,7 @@ export default function Home() {
       </section>
 
       <section className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-10">
-        <div className="w-full max-w-[440px]">
+        <div className="w-full max-w-110">
           <div className="mb-9 flex items-center gap-3 lg:hidden">
             <div className="flex size-10 items-center justify-center rounded-xl bg-[#173c2c] text-[#d4f36b]">
               <Trophy size={20} />
