@@ -207,7 +207,7 @@ export default function Home() {
             ].map((item) => (
               <div
                 key={item.title}
-                className="rounded-2xl border border-white/10 bg-white/[.06] p-4"
+                className="rounded-2xl border border-white/10 bg-white/6 p-4"
               >
                 <item.icon size={18} className="mb-5 text-[#d4f36b]" />
                 <p className="text-sm font-medium">{item.title}</p>

@@ -15,7 +15,6 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
-
   @Public()
   @Post('register')
   @ApiOperation({ summary: 'Register as a consumer of a club' })
@@ -25,14 +24,18 @@ export class AuthController {
 
   @Public()
   @Post('login')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(200)
-  @ApiOperation({ summary: 'Login (clubSlug for club users, none for platform admin)' })
+  @ApiOperation({
+    summary: 'Login (clubSlug for club users, none for platform admin)',
+  })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
 
   @Public()
   @Post('refresh')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(200)
   @ApiOperation({ summary: 'Exchange a refresh token for a new token pair' })
   refresh(@Body() dto: RefreshDto) {
