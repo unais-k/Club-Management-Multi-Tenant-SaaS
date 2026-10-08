@@ -128,7 +128,7 @@ export default function MembershipsPage() {
       <header className="border-b border-[#e6ebe6] bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
           <div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-[#173c2c] text-[#d4f36b]"><Trophy size={20}/></div><div><p className="font-heading text-base font-semibold">CourtSide</p><p className="text-xs text-[#859087]">{profile?.club?.name ?? "Your club"}</p></div></div>
-          <div className="flex items-center gap-2"><Link href="/" className="inline-flex h-9 items-center rounded-lg px-3 text-xs font-medium text-[#526158] hover:bg-[#f2f5f1]"><ArrowLeft size={15} className="mr-1.5"/>Courts</Link><Button onClick={signOut} variant="outline" className="h-9 rounded-lg border-[#dfe6df] px-3 text-xs">Sign out</Button></div>
+          <div className="flex items-center gap-1 sm:gap-2"><Link href="/" className="inline-flex h-9 items-center rounded-lg px-2 text-xs font-medium text-[#526158] hover:bg-[#f2f5f1] sm:px-3"><ArrowLeft size={15} className="mr-1.5"/>Courts</Link><Link href="/bookings" className="inline-flex h-9 items-center rounded-lg px-2 text-xs font-medium text-[#526158] hover:bg-[#f2f5f1] sm:px-3">Bookings</Link><Button onClick={signOut} variant="outline" className="h-9 rounded-lg border-[#dfe6df] px-2.5 text-xs sm:px-3">Sign out</Button></div>
         </div>
       </header>
 
