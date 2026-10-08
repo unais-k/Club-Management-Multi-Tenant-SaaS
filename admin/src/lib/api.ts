@@ -19,6 +19,10 @@ function announceApiError(message: string, status?: number) {
   window.dispatchEvent(new CustomEvent('club-admin:api-error', { detail: { message, status } }))
 }
 
+function isAbortError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError'
+}
+
 type ApiOptions = RequestInit & {
   authenticated?: boolean
   retryAfterRefresh?: boolean
@@ -103,7 +107,11 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
       headers: requestHeaders,
     })
   } catch (error) {
-    announceApiError('Could not reach the server. Check your connection and try again.')
+    // React Strict Mode intentionally aborts the first development-only effect request.
+    // An abort is not a server/network failure and should not trigger the global error toast.
+    if (!isAbortError(error)) {
+      announceApiError('Could not reach the server. Check your connection and try again.')
+    }
     throw error
   }
 

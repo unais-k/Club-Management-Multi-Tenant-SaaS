@@ -37,6 +37,7 @@ export class RedisThrottlerStorage
 {
   private readonly logger = new Logger(RedisThrottlerStorage.name);
   private readonly redis?: InstanceType<typeof Redis>;
+  private redisUnavailableLogged = false;
 
   constructor(config: ConfigService) {
     const redisUrl = config.get<string>('REDIS_URL');
@@ -45,6 +46,18 @@ export class RedisThrottlerStorage
         connectTimeout: 5_000,
         maxRetriesPerRequest: 1,
         enableOfflineQueue: false,
+      });
+      this.redis.on('error', () => {
+        if (this.redisUnavailableLogged) return;
+        this.logger.warn(
+          'Redis is unreachable; check REDIS_URL and ensure the Redis server is running.',
+        );
+        this.redisUnavailableLogged = true;
+      });
+      this.redis.on('ready', () => {
+        if (!this.redisUnavailableLogged) return;
+        this.logger.log('Redis connection restored.');
+        this.redisUnavailableLogged = false;
       });
     } else {
       this.logger.warn(

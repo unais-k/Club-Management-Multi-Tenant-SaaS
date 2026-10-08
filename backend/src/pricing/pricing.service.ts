@@ -32,6 +32,7 @@ const RESERVED_SHIFT_NAMES = ['normal', 'default'];
 
 export interface SlotPrice {
   price: number | null;
+  prices?: { membershipId: string; membershipName: string; price: number }[];
   breakdown?: QuoteSegment[]; // only when the slot crosses two or more shifts
   priceNote?: string; // why the price is missing
 }
@@ -46,14 +47,17 @@ export interface Pricer {
 @Injectable()
 export class PricingService {
   constructor(
-    @InjectRepository(PricingShift) private readonly shiftRepo: Repository<PricingShift>,
-    @InjectRepository(CourtPrice) private readonly priceRepo: Repository<CourtPrice>,
+    @InjectRepository(PricingShift)
+    private readonly shiftRepo: Repository<PricingShift>,
+    @InjectRepository(CourtPrice)
+    private readonly priceRepo: Repository<CourtPrice>,
     @InjectRepository(Court) private readonly courtRepo: Repository<Court>,
-    @InjectRepository(Location) private readonly locationRepo: Repository<Location>,
+    @InjectRepository(Location)
+    private readonly locationRepo: Repository<Location>,
     @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
     private readonly dataSource: DataSource,
     private readonly membershipsService: MembershipsService,
-  ) { }
+  ) {}
 
   // ---------- Shifts ----------
 
@@ -94,10 +98,16 @@ export class PricingService {
   async updateShift(clubId: string, id: string, dto: UpdateShiftDto) {
     const shift = await this.getShift(clubId, id);
 
-    const name = dto.name !== undefined ? this.cleanShiftName(dto.name) : shift.name;
-    const start = dto.startTime !== undefined ? toMinutes(dto.startTime) : shift.startMinute;
-    const end = dto.endTime !== undefined ? toMinutes(dto.endTime) : shift.endMinute;
-    if (start >= end) throw new BadRequestException('endTime must be after startTime');
+    const name =
+      dto.name !== undefined ? this.cleanShiftName(dto.name) : shift.name;
+    const start =
+      dto.startTime !== undefined
+        ? toMinutes(dto.startTime)
+        : shift.startMinute;
+    const end =
+      dto.endTime !== undefined ? toMinutes(dto.endTime) : shift.endMinute;
+    if (start >= end)
+      throw new BadRequestException('endTime must be after startTime');
 
     await this.assertShiftFits(clubId, shift.locationId, name, start, end, id);
 
@@ -120,12 +130,22 @@ export class PricingService {
 
   // ---------- Court prices ----------
 
-  async setCourtPrices(clubId: string, courtId: string, dto: SetCourtPricesDto) {
+  async setCourtPrices(
+    clubId: string,
+    courtId: string,
+    dto: SetCourtPricesDto,
+  ) {
     await this.assertShiftBased(clubId);
-    const { court, location } = await this.getCourtWithLocation(clubId, courtId);
+    const { court, location } = await this.getCourtWithLocation(
+      clubId,
+      courtId,
+    );
     const offered = court.durations ?? location.durations;
 
-    const shifts = await this.shiftRepo.findBy({ clubId, locationId: location.id });
+    const shifts = await this.shiftRepo.findBy({
+      clubId,
+      locationId: location.id,
+    });
     const shiftNames = new Map(shifts.map((s) => [s.id, s.name]));
 
     const seen = new Set<string>();
@@ -149,7 +169,13 @@ export class PricingService {
       }
       seen.add(key);
 
-      return { clubId, courtId: court.id, shiftId, durationMinutes: p.durationMinutes, price: p.price };
+      return {
+        clubId,
+        courtId: court.id,
+        shiftId,
+        durationMinutes: p.durationMinutes,
+        price: p.price,
+      };
     });
 
     // Replace the whole list atomically
@@ -162,7 +188,11 @@ export class PricingService {
   }
 
   async getCourtPrices(clubId: string, role: UserRole, courtId: string) {
-    const { court, location } = await this.getCourtWithLocation(clubId, courtId, role);
+    const { court, location } = await this.getCourtWithLocation(
+      clubId,
+      courtId,
+      role,
+    );
     const offered = court.durations ?? location.durations;
 
     const [shifts, prices] = await Promise.all([
@@ -187,7 +217,9 @@ export class PricingService {
       prices: current.map((p) => ({
         durationMinutes: p.durationMinutes,
         shiftId: p.shiftId,
-        shiftName: p.shiftId ? (shiftNames.get(p.shiftId) ?? 'Unknown') : 'Normal',
+        shiftName: p.shiftId
+          ? (shiftNames.get(p.shiftId) ?? 'Unknown')
+          : 'Normal',
         price: p.price,
       })),
     };
@@ -195,13 +227,25 @@ export class PricingService {
     if (role !== UserRole.CLUB_ADMIN) return response;
 
     // Help the admin: which (duration, shift) combinations still have no price?
-    const missing: { durationMinutes: number; shiftId: string | null; shiftName: string }[] = [];
+    const missing: {
+      durationMinutes: number;
+      shiftId: string | null;
+      shiftName: string;
+    }[] = [];
     for (const duration of offered) {
-      for (const slot of [{ id: null as string | null, name: 'Normal' }, ...shifts]) {
+      for (const slot of [
+        { id: null as string | null, name: 'Normal' },
+        ...shifts,
+      ]) {
         const has = current.some(
           (p) => p.durationMinutes === duration && p.shiftId === slot.id,
         );
-        if (!has) missing.push({ durationMinutes: duration, shiftId: slot.id, shiftName: slot.name });
+        if (!has)
+          missing.push({
+            durationMinutes: duration,
+            shiftId: slot.id,
+            shiftName: slot.name,
+          });
       }
     }
     return { ...response, missing };
@@ -211,7 +255,11 @@ export class PricingService {
 
   async quote(clubId: string, user: AuthUser, q: QuoteQueryDto) {
     const model = await this.getPricingModel(clubId);
-    const { court, location } = await this.getCourtWithLocation(clubId, q.courtId, user.role);
+    const { court, location } = await this.getCourtWithLocation(
+      clubId,
+      q.courtId,
+      user.role,
+    );
 
     const offered = court.durations ?? location.durations;
     if (!offered.includes(q.durationMinutes)) {
@@ -235,11 +283,15 @@ export class PricingService {
 
     // ----- Membership-based club -----
     if (model === PricingModel.MEMBERSHIP_BASED) {
-      const resolved = await this.membershipsService.resolvePrice(clubId, q.durationMinutes, {
-        role: user.role,
-        userId: user.role === UserRole.CONSUMER ? user.id : undefined,
-        membershipId: q.membershipId,
-      });
+      const resolved = await this.membershipsService.resolvePrice(
+        clubId,
+        q.durationMinutes,
+        {
+          role: user.role,
+          userId: user.role === UserRole.CONSUMER ? user.id : undefined,
+          membershipId: q.membershipId,
+        },
+      );
       return {
         ...base,
         total: resolved.price,
@@ -251,7 +303,9 @@ export class PricingService {
 
     // ----- Shift-based club (unchanged from Step 8) -----
     if (q.membershipId) {
-      throw new BadRequestException('membershipId only applies to membership-based clubs');
+      throw new BadRequestException(
+        'membershipId only applies to membership-based clubs',
+      );
     }
 
     const [shifts, prices] = await Promise.all([
@@ -268,7 +322,8 @@ export class PricingService {
       });
       return { ...base, total: result.total, segments: result.segments };
     } catch (err) {
-      if (err instanceof MissingPriceError) throw new UnprocessableEntityException(err.message);
+      if (err instanceof MissingPriceError)
+        throw new UnprocessableEntityException(err.message);
       throw err;
     }
   }
@@ -289,17 +344,50 @@ export class PricingService {
 
     // ----- Membership-based: one price for every slot, resolved once -----
     if (model === PricingModel.MEMBERSHIP_BASED) {
+      if (user.role === UserRole.CLUB_ADMIN && !membershipId) {
+        const plans = await this.membershipsService.findAll(clubId, user.role);
+        const prices = plans
+          .filter((plan) => plan.isActive)
+          .flatMap((plan) => {
+            const entry = plan.prices.find(
+              (candidate) => candidate.durationMinutes === durationMinutes,
+            );
+            return entry
+              ? [
+                  {
+                    membershipId: plan.id,
+                    membershipName: plan.name,
+                    price: entry.price,
+                  },
+                ]
+              : [];
+          });
+
+        return {
+          model,
+          membership: null,
+          note: prices.length
+            ? null
+            : `No active membership plan has a price for ${durationMinutes} minutes`,
+          priceFor: () => ({ price: null, prices }),
+        };
+      }
+
       let price: number | null = null;
       let membership: Pricer['membership'] = null;
       let note: string | null = null;
 
       if (user.role === UserRole.CONSUMER || membershipId) {
         try {
-          const resolved = await this.membershipsService.resolvePrice(clubId, durationMinutes, {
-            role: user.role,
-            userId: user.role === UserRole.CONSUMER ? user.id : undefined,
-            membershipId,
-          });
+          const resolved = await this.membershipsService.resolvePrice(
+            clubId,
+            durationMinutes,
+            {
+              role: user.role,
+              userId: user.role === UserRole.CONSUMER ? user.id : undefined,
+              membershipId,
+            },
+          );
           price = resolved.price;
           membership = resolved.membership;
         } catch (err) {
@@ -316,7 +404,9 @@ export class PricingService {
 
     // ----- Shift-based -----
     if (membershipId) {
-      throw new BadRequestException('membershipId only applies to membership-based clubs');
+      throw new BadRequestException(
+        'membershipId only applies to membership-based clubs',
+      );
     }
 
     const [shifts, prices] = await Promise.all([
@@ -350,7 +440,8 @@ export class PricingService {
             ...(result.segments.length > 1 && { breakdown: result.segments }),
           };
         } catch (err) {
-          if (err instanceof MissingPriceError) return { price: null, priceNote: err.message };
+          if (err instanceof MissingPriceError)
+            return { price: null, priceNote: err.message };
           throw err;
         }
       },
@@ -379,7 +470,11 @@ export class PricingService {
   }
 
   // Tenant check: location must belong to this club (consumers: active only)
-  private async getLocation(clubId: string, id: string, role?: UserRole): Promise<Location> {
+  private async getLocation(
+    clubId: string,
+    id: string,
+    role?: UserRole,
+  ): Promise<Location> {
     const location = await this.locationRepo.findOneBy({ id, clubId });
     if (!location || (role === UserRole.CONSUMER && !location.isActive)) {
       throw new NotFoundException('Location not found');
@@ -388,7 +483,11 @@ export class PricingService {
   }
 
   // Tenant check: court and its location must belong to this club
-  private async getCourtWithLocation(clubId: string, courtId: string, role?: UserRole) {
+  private async getCourtWithLocation(
+    clubId: string,
+    courtId: string,
+    role?: UserRole,
+  ) {
     const court = await this.courtRepo.findOneBy({ id: courtId, clubId });
     if (!court || (role === UserRole.CONSUMER && !court.isActive)) {
       throw new NotFoundException('Court not found');
@@ -400,7 +499,8 @@ export class PricingService {
   private parseRange(startTime: string, endTime: string) {
     const start = toMinutes(startTime);
     const end = toMinutes(endTime);
-    if (start >= end) throw new BadRequestException('endTime must be after startTime');
+    if (start >= end)
+      throw new BadRequestException('endTime must be after startTime');
     return { start, end };
   }
 
@@ -431,7 +531,9 @@ export class PricingService {
     if (others.some((s) => s.name.toLowerCase() === name.toLowerCase())) {
       throw this.shiftNameTaken(name);
     }
-    const clash = others.find((s) => start < s.endMinute && end > s.startMinute);
+    const clash = others.find(
+      (s) => start < s.endMinute && end > s.startMinute,
+    );
     if (clash) {
       throw new ConflictException(
         `This overlaps the shift "${clash.name}" (${toHHmm(clash.startMinute)}-${toHHmm(clash.endMinute)})`,
@@ -440,7 +542,9 @@ export class PricingService {
   }
 
   private shiftNameTaken(name: string) {
-    return new ConflictException(`A shift named "${name}" already exists in this location`);
+    return new ConflictException(
+      `A shift named "${name}" already exists in this location`,
+    );
   }
 
   private toShiftResponse(s: PricingShift) {
