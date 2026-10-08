@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import {
   Bell,
+  CalendarDays,
+  Clock3,
   Building2,
   Grid2X2,
   LayoutDashboard,
@@ -23,6 +25,8 @@ import { CourtsPage } from '@/pages/courts'
 import { PricingPage } from '@/pages/pricing'
 import { MembershipsPage } from '@/pages/memberships'
 import { OverviewPage } from '@/pages/overview'
+import { BookingsPage } from '@/pages/bookings'
+import { AvailabilityPage } from '@/pages/availability'
 
 const navigation = [
   { label: 'Overview', path: '/overview', icon: LayoutDashboard },
@@ -31,6 +35,8 @@ const navigation = [
   { label: 'Courts', path: '/courts', icon: Grid2X2, role: 'CLUB_ADMIN' },
   { label: 'Pricing', path: '/pricing', icon: Coins, role: 'CLUB_ADMIN' },
   { label: 'Memberships', path: '/memberships', icon: BadgeCheck, role: 'CLUB_ADMIN' },
+  { label: 'Availability', path: '/availability', icon: Clock3, role: 'CLUB_ADMIN' },
+  { label: 'Bookings', path: '/bookings', icon: CalendarDays, role: 'CLUB_ADMIN' },
   { label: 'Settings', path: '/settings', icon: Settings2 },
 ]
 
@@ -58,6 +64,14 @@ const pageCopy: Record<string, { title: string; description: string }> = {
   '/memberships': {
     title: 'Memberships',
     description: 'Manage membership plans and duration-based prices.',
+  },
+  '/availability': {
+    title: 'Availability',
+    description: 'Review bookable slots using live schedules, closures, and bookings.',
+  },
+  '/bookings': {
+    title: 'Bookings',
+    description: 'Review and manage your club bookings.',
   },
   '/settings': {
     title: 'Settings',
@@ -99,7 +113,7 @@ function App() {
   }
   if (pathname === '/login') return <Navigate to={homePath} replace />
   if (pathname === '/') return <Navigate to={homePath} replace />
-  const isClubAdminPath = ['/locations', '/courts', '/pricing', '/memberships'].some(
+  const isClubAdminPath = ['/locations', '/courts', '/pricing', '/memberships', '/availability', '/bookings'].some(
     (path) => pathname === path || pathname.startsWith(`${path}/`),
   )
   const isPlatformAdminPath = pathname === '/clubs' || pathname.startsWith('/clubs/')
@@ -236,6 +250,8 @@ function App() {
             <Route path="/courts" element={<CourtsPage />} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/memberships" element={<MembershipsPage />} />
+            <Route path="/availability" element={<AvailabilityPage />} />
+            <Route path="/bookings" element={<BookingsPage />} />
             <Route path="/settings" element={<PlaceholderPage {...pageCopy['/settings']} />} />
             <Route path="*" element={<Navigate to={homePath} replace />} />
           </Routes>
