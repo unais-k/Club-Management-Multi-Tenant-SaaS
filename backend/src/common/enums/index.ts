@@ -8,3 +8,8 @@ export enum UserRole {
   CLUB_ADMIN = 'CLUB_ADMIN',
   CONSUMER = 'CONSUMER',
 }
+
+export enum BookingStatus {
+  CONFIRMED = 'CONFIRMED',
+  CANCELLED = 'CANCELLED',
+}

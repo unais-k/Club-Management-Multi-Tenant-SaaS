@@ -6,12 +6,14 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { PricingModel, UserRole } from '../common/enums/index.js';
 import { isUniqueViolation } from '../common/helpers/db-errors.js';
 import { toHHmm, toMinutes } from '../common/helpers/time.js';
+import { AuthUser } from '../common/types/auth-user.js';
 import { Court } from '../courts/entities/court.entity.js';
 import { Location } from '../locations/entities/location.entity.js';
+import { MembershipsService } from '../memberships/memberships.service.js';
 import { Tenant } from '../tenants/entities/tenant.entity.js';
 import { CreateShiftDto } from './dto/create-shift.dto.js';
 import { QuoteQueryDto } from './dto/quote-query.dto.js';
@@ -19,9 +21,27 @@ import { SetCourtPricesDto } from './dto/set-court-prices.dto.js';
 import { UpdateShiftDto } from './dto/update-shift.dto.js';
 import { CourtPrice } from './entities/court-price.entity.js';
 import { PricingShift } from './entities/pricing-shift.entity.js';
-import { MissingPriceError, calculateShiftPrice } from './pricing-calculator.js';
+import {
+  MissingPriceError,
+  type PriceEntry,
+  type QuoteSegment,
+  calculateShiftPrice,
+} from './pricing-calculator.js';
 
 const RESERVED_SHIFT_NAMES = ['normal', 'default'];
+
+export interface SlotPrice {
+  price: number | null;
+  breakdown?: QuoteSegment[]; // only when the slot crosses two or more shifts
+  priceNote?: string; // why the price is missing
+}
+
+export interface Pricer {
+  model: PricingModel;
+  membership: { id: string; name: string } | null;
+  note: string | null;
+  priceFor: (courtId: string, startMinute: number) => SlotPrice;
+}
 
 @Injectable()
 export class PricingService {
@@ -32,7 +52,8 @@ export class PricingService {
     @InjectRepository(Location) private readonly locationRepo: Repository<Location>,
     @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
     private readonly dataSource: DataSource,
-  ) {}
+    private readonly membershipsService: MembershipsService,
+  ) { }
 
   // ---------- Shifts ----------
 
@@ -188,14 +209,10 @@ export class PricingService {
 
   // ---------- Quote ----------
 
-  async quote(clubId: string, role: UserRole, q: QuoteQueryDto) {
+  async quote(clubId: string, user: AuthUser, q: QuoteQueryDto) {
     const model = await this.getPricingModel(clubId);
-    if (model !== PricingModel.SHIFT_BASED) {
-      // Membership-based quotes are added in Step 9
-      throw new ConflictException('Membership-based quotes are not available yet');
-    }
+    const { court, location } = await this.getCourtWithLocation(clubId, q.courtId, user.role);
 
-    const { court, location } = await this.getCourtWithLocation(clubId, q.courtId, role);
     const offered = court.durations ?? location.durations;
     if (!offered.includes(q.durationMinutes)) {
       throw new BadRequestException(
@@ -206,6 +223,35 @@ export class PricingService {
     const start = toMinutes(q.startTime);
     if (start + q.durationMinutes > 1440) {
       throw new BadRequestException('A booking must end by 24:00');
+    }
+
+    const base = {
+      model,
+      courtId: court.id,
+      startTime: toHHmm(start),
+      endTime: toHHmm(start + q.durationMinutes),
+      durationMinutes: q.durationMinutes,
+    };
+
+    // ----- Membership-based club -----
+    if (model === PricingModel.MEMBERSHIP_BASED) {
+      const resolved = await this.membershipsService.resolvePrice(clubId, q.durationMinutes, {
+        role: user.role,
+        userId: user.role === UserRole.CONSUMER ? user.id : undefined,
+        membershipId: q.membershipId,
+      });
+      return {
+        ...base,
+        total: resolved.price,
+        membership: resolved.membership,
+        userMembershipId: resolved.userMembershipId,
+        segments: [],
+      };
+    }
+
+    // ----- Shift-based club (unchanged from Step 8) -----
+    if (q.membershipId) {
+      throw new BadRequestException('membershipId only applies to membership-based clubs');
     }
 
     const [shifts, prices] = await Promise.all([
@@ -220,19 +266,95 @@ export class PricingService {
         shifts,
         prices,
       });
-      return {
-        model: PricingModel.SHIFT_BASED,
-        courtId: court.id,
-        startTime: toHHmm(start),
-        endTime: toHHmm(start + q.durationMinutes),
-        durationMinutes: q.durationMinutes,
-        total: result.total,
-        segments: result.segments,
-      };
+      return { ...base, total: result.total, segments: result.segments };
     } catch (err) {
       if (err instanceof MissingPriceError) throw new UnprocessableEntityException(err.message);
       throw err;
     }
+  }
+
+  // Loads everything needed once, then prices any number of slots with no further queries
+  async createPricer(
+    clubId: string,
+    user: AuthUser,
+    args: {
+      model: PricingModel;
+      locationId: string;
+      courtIds: string[];
+      durationMinutes: number;
+      membershipId?: string;
+    },
+  ): Promise<Pricer> {
+    const { model, locationId, courtIds, durationMinutes, membershipId } = args;
+
+    // ----- Membership-based: one price for every slot, resolved once -----
+    if (model === PricingModel.MEMBERSHIP_BASED) {
+      let price: number | null = null;
+      let membership: Pricer['membership'] = null;
+      let note: string | null = null;
+
+      if (user.role === UserRole.CONSUMER || membershipId) {
+        try {
+          const resolved = await this.membershipsService.resolvePrice(clubId, durationMinutes, {
+            role: user.role,
+            userId: user.role === UserRole.CONSUMER ? user.id : undefined,
+            membershipId,
+          });
+          price = resolved.price;
+          membership = resolved.membership;
+        } catch (err) {
+          // "no membership" / "no price for this duration": keep the slots, explain the price
+          if (!(err instanceof UnprocessableEntityException)) throw err;
+          note = err.message;
+        }
+      } else {
+        note = 'Pass membershipId to preview the price of a membership plan';
+      }
+
+      return { model, membership, note, priceFor: () => ({ price }) };
+    }
+
+    // ----- Shift-based -----
+    if (membershipId) {
+      throw new BadRequestException('membershipId only applies to membership-based clubs');
+    }
+
+    const [shifts, prices] = await Promise.all([
+      this.shiftRepo.findBy({ clubId, locationId }),
+      courtIds.length > 0
+        ? this.priceRepo.findBy({ clubId, courtId: In(courtIds) })
+        : Promise.resolve([] as CourtPrice[]),
+    ]);
+
+    const pricesByCourt = new Map<string, PriceEntry[]>();
+    for (const p of prices) {
+      const list = pricesByCourt.get(p.courtId) ?? [];
+      list.push(p);
+      pricesByCourt.set(p.courtId, list);
+    }
+
+    return {
+      model,
+      membership: null,
+      note: null,
+      priceFor: (courtId, startMinute) => {
+        try {
+          const result = calculateShiftPrice({
+            startMinute,
+            durationMinutes,
+            shifts,
+            prices: pricesByCourt.get(courtId) ?? [],
+          });
+          return {
+            price: result.total,
+            ...(result.segments.length > 1 && { breakdown: result.segments }),
+          };
+        } catch (err) {
+          if (err instanceof MissingPriceError) return { price: null, priceNote: err.message };
+          throw err;
+        }
+      },
+    };
   }
 
   // ---------- Helpers ----------

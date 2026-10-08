@@ -27,7 +27,7 @@ import { PricingService } from './pricing.service.js';
 @Roles(UserRole.CLUB_ADMIN)
 @Controller('pricing')
 export class PricingController {
-  constructor(private readonly pricingService: PricingService) {}
+  constructor(private readonly pricingService: PricingService) { }
 
   @Post('shifts')
   @ApiOperation({ summary: 'Create a pricing shift for a location' })
@@ -92,6 +92,6 @@ export class PricingController {
     @CurrentUser() user: AuthUser,
     @Query() query: QuoteQueryDto,
   ) {
-    return this.pricingService.quote(clubId, user.role, query);
+    return this.pricingService.quote(clubId, user, query);
   }
 }
