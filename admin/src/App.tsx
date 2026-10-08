@@ -5,8 +5,10 @@ import {
   Grid2X2,
   LayoutDashboard,
   LogOut,
+  BadgeCheck,
   MapPin,
   Menu,
+  Coins,
   Search,
   Settings2,
   X,
@@ -16,12 +18,19 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/auth/auth-context'
 import { LoginPage } from '@/pages/login'
 import { ClubsPage } from '@/pages/clubs'
+import { LocationsPage } from '@/pages/locations'
+import { CourtsPage } from '@/pages/courts'
+import { PricingPage } from '@/pages/pricing'
+import { MembershipsPage } from '@/pages/memberships'
+import { OverviewPage } from '@/pages/overview'
 
 const navigation = [
   { label: 'Overview', path: '/overview', icon: LayoutDashboard },
   { label: 'Clubs', path: '/clubs', icon: Building2, role: 'PLATFORM_ADMIN' },
   { label: 'Locations', path: '/locations', icon: MapPin, role: 'CLUB_ADMIN' },
   { label: 'Courts', path: '/courts', icon: Grid2X2, role: 'CLUB_ADMIN' },
+  { label: 'Pricing', path: '/pricing', icon: Coins, role: 'CLUB_ADMIN' },
+  { label: 'Memberships', path: '/memberships', icon: BadgeCheck, role: 'CLUB_ADMIN' },
   { label: 'Settings', path: '/settings', icon: Settings2 },
 ]
 
@@ -41,6 +50,14 @@ const pageCopy: Record<string, { title: string; description: string }> = {
   '/courts': {
     title: 'Courts',
     description: 'Manage courts, booking durations, and court hours.',
+  },
+  '/pricing': {
+    title: 'Pricing',
+    description: 'Configure shifts and court rates for your club.',
+  },
+  '/memberships': {
+    title: 'Memberships',
+    description: 'Manage membership plans and duration-based prices.',
   },
   '/settings': {
     title: 'Settings',
@@ -82,7 +99,7 @@ function App() {
   }
   if (pathname === '/login') return <Navigate to={homePath} replace />
   if (pathname === '/') return <Navigate to={homePath} replace />
-  const isClubAdminPath = ['/locations', '/courts'].some(
+  const isClubAdminPath = ['/locations', '/courts', '/pricing', '/memberships'].some(
     (path) => pathname === path || pathname.startsWith(`${path}/`),
   )
   const isPlatformAdminPath = pathname === '/clubs' || pathname.startsWith('/clubs/')
@@ -213,10 +230,12 @@ function App() {
             <p className="mt-1 text-sm text-muted-foreground">{page.description}</p>
           </div>
           <Routes>
-            <Route path="/overview" element={<PlaceholderPage {...pageCopy['/overview']} />} />
+            <Route path="/overview" element={<OverviewPage />} />
             <Route path="/clubs" element={<ClubsPage />} />
-            <Route path="/locations" element={<PlaceholderPage {...pageCopy['/locations']} />} />
-            <Route path="/courts" element={<PlaceholderPage {...pageCopy['/courts']} />} />
+            <Route path="/locations" element={<LocationsPage />} />
+            <Route path="/courts" element={<CourtsPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/memberships" element={<MembershipsPage />} />
             <Route path="/settings" element={<PlaceholderPage {...pageCopy['/settings']} />} />
             <Route path="*" element={<Navigate to={homePath} replace />} />
           </Routes>
