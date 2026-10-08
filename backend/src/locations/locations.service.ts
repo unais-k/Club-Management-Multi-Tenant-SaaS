@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, ILike, Repository } from 'typeorm';
+import { BookingsService } from '../bookings/bookings.service.js';
 import { UserRole } from '../common/enums/index.js';
 import { isUniqueViolation } from '../common/helpers/db-errors.js';
 import { findOutsideHours } from '../common/helpers/schedule.js';
@@ -35,7 +36,8 @@ export class LocationsService {
     @InjectRepository(Court)
     private readonly courtRepo: Repository<Court>,
     private readonly dataSource: DataSource,
-  ) { }
+    private readonly bookingsService: BookingsService,
+  ) {}
 
   // ---------- Locations ----------
 
@@ -131,6 +133,14 @@ export class LocationsService {
 
   async remove(clubId: string, id: string) {
     await this.getOwned(clubId, id); // 404 if it is not ours
+    const upcoming = await this.bookingsService.countUpcoming(clubId, {
+      locationId: id,
+    });
+    if (upcoming > 0) {
+      throw new ConflictException(
+        `This location has ${upcoming} upcoming booking(s). Cancel them first.`,
+      );
+    }
     await this.dataSource.transaction(async (manager) => {
       await manager.softDelete(Court, { clubId, locationId: id });
       await manager.softDelete(Location, { id, clubId });
@@ -229,6 +239,18 @@ export class LocationsService {
     if (hasOverlap([...ranges, { start, end }])) {
       throw new ConflictException(
         'This overlaps an existing unavailable period on that date',
+      );
+    }
+    const affected = await this.bookingsService.countOverlapping(
+      clubId,
+      location.id,
+      dto.date,
+      start,
+      end,
+    );
+    if (affected > 0) {
+      throw new ConflictException(
+        `${affected} confirmed booking(s) fall inside this period. Cancel them first.`,
       );
     }
 

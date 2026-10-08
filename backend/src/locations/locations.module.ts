@@ -6,10 +6,17 @@ import { Location } from './entities/location.entity.js';
 import { LocationsController } from './locations.controller.js';
 import { LocationsService } from './locations.service.js';
 import { Court } from '../courts/entities/court.entity.js';
+import { BookingsModule } from '../bookings/bookings.module.js';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Location, LocationOpeningHour, LocationUnavailablePeriod, Court]),
+    TypeOrmModule.forFeature([
+      Location,
+      LocationOpeningHour,
+      LocationUnavailablePeriod,
+      Court,
+    ]),
+    BookingsModule,
   ],
   controllers: [LocationsController],
   providers: [LocationsService],

@@ -21,6 +21,7 @@ import { SetCourtOpeningHoursDto } from './dto/set-court-opening-hours.dto.js';
 import { UpdateCourtDto } from './dto/update-court.dto.js';
 import { CourtOpeningHour } from './entities/court-opening-hour.entity.js';
 import { Court } from './entities/court.entity.js';
+import { BookingsService } from '../bookings/bookings.service.js';
 
 @Injectable()
 export class CourtsService {
@@ -28,7 +29,8 @@ export class CourtsService {
     @InjectRepository(Court) private readonly courtRepo: Repository<Court>,
     @InjectRepository(Location) private readonly locationRepo: Repository<Location>,
     private readonly dataSource: DataSource,
-  ) {}
+    private readonly bookingsService: BookingsService,
+  ) { }
 
   async create(clubId: string, locationId: string, dto: CreateCourtDto) {
     const location = await this.getLocation(clubId, locationId);
@@ -102,6 +104,13 @@ export class CourtsService {
 
   async remove(clubId: string, id: string) {
     await this.getOwned(clubId, id); // 404 if it is not ours
+
+    const upcoming = await this.bookingsService.countUpcoming(clubId, { courtId: id });
+    if (upcoming > 0) {
+      throw new ConflictException(
+        `This court has ${upcoming} upcoming booking(s). Cancel them first.`,
+      );
+    }
     await this.courtRepo.softDelete({ id, clubId });
   }
 
@@ -203,7 +212,7 @@ export class CourtsService {
     if (invalid.length > 0) {
       throw new BadRequestException(
         `Duration(s) ${invalid.join(', ')} are not offered by the location. ` +
-          `The location offers: ${location.durations.join(', ')}`,
+        `The location offers: ${location.durations.join(', ')}`,
       );
     }
     return [...durations].sort((a, b) => a - b);

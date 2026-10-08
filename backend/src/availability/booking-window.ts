@@ -27,3 +27,14 @@ export function evaluateBookingDate(
   // Today: nothing before the current minute can be booked
   return { ok: true, earliestStart: date === today.date ? today.minute : 0 };
 }
+
+// True once the booking's start minute has been reached in the club's timezone
+export function hasStarted(
+  date: string,
+  startMinute: number,
+  timeZone: string,
+  now = new Date(),
+): boolean {
+  const today = nowInTimezone(timeZone, now);
+  return date < today.date || (date === today.date && startMinute <= today.minute);
+}

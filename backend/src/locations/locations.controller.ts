@@ -28,7 +28,7 @@ import { LocationsService } from './locations.service.js';
 @Roles(UserRole.CLUB_ADMIN)
 @Controller('locations')
 export class LocationsController {
-  constructor(private readonly locationsService: LocationsService) {}
+  constructor(private readonly locationsService: LocationsService) { }
 
   @Post()
   @ApiOperation({ summary: 'Create a location' })

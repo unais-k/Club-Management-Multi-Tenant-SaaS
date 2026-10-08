@@ -7,3 +7,11 @@ export function isUniqueViolation(err: unknown): boolean {
     (err.driverError as { code?: string })?.code === '23505'
   );
 }
+
+// PostgreSQL error code 23P01 = exclusion constraint violated (overlapping booking)
+export function isExclusionViolation(err: unknown): boolean {
+  return (
+    err instanceof QueryFailedError &&
+    (err.driverError as { code?: string })?.code === '23P01'
+  );
+}
