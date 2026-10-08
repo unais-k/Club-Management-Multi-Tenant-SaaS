@@ -1,0 +1,2171 @@
+{
+    "openapi": "3.0.0",
+    "paths": {
+        "/auth/register": {
+            "post": {
+                "operationId": "AuthController_register",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RegisterDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "summary": "Register as a consumer of a club",
+                "tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "operationId": "AuthController_login",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "summary": "Login (clubSlug for club users, none for platform admin)",
+                "tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "/auth/refresh": {
+            "post": {
+                "operationId": "AuthController_refresh",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RefreshDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "summary": "Exchange a refresh token for a new token pair",
+                "tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "operationId": "AuthController_logout",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Logout (invalidates the refresh token)",
+                "tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "/auth/me": {
+            "get": {
+                "operationId": "AuthController_me",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Current user profile",
+                "tags": [
+                    "Auth"
+                ]
+            }
+        },
+        "/tenants": {
+            "post": {
+                "operationId": "TenantsController_create",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateTenantDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Create a club and its first club admin",
+                "tags": [
+                    "Tenants"
+                ]
+            },
+            "get": {
+                "operationId": "TenantsController_findAll",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "default": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "maximum": 100,
+                            "default": 10,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Search by club name",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "List clubs (paginated, searchable)",
+                "tags": [
+                    "Tenants"
+                ]
+            }
+        },
+        "/tenants/{id}/operations": {
+            "get": {
+                "operationId": "TenantsController_getOperations",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Get a club schedule and pricing overview for the platform admin",
+                "tags": [
+                    "Tenants"
+                ]
+            }
+        },
+        "/tenants/{id}": {
+            "get": {
+                "operationId": "TenantsController_findOne",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Get one club",
+                "tags": [
+                    "Tenants"
+                ]
+            },
+            "put": {
+                "operationId": "TenantsController_update",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateTenantDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Update club name/timezone",
+                "tags": [
+                    "Tenants"
+                ]
+            }
+        },
+        "/tenants/{id}/status": {
+            "patch": {
+                "operationId": "TenantsController_updateStatus",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateTenantStatusDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Activate or deactivate a club",
+                "tags": [
+                    "Tenants"
+                ]
+            }
+        },
+        "/locations": {
+            "post": {
+                "operationId": "LocationsController_create",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateLocationDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Create a location",
+                "tags": [
+                    "Locations"
+                ]
+            },
+            "get": {
+                "operationId": "LocationsController_findAll",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "default": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "maximum": 100,
+                            "default": 10,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Search by location name",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "List locations of my club",
+                "tags": [
+                    "Locations"
+                ]
+            }
+        },
+        "/locations/{id}": {
+            "get": {
+                "operationId": "LocationsController_findOne",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Get a location with its opening hours",
+                "tags": [
+                    "Locations"
+                ]
+            },
+            "put": {
+                "operationId": "LocationsController_update",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateLocationDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Update location details, durations or status",
+                "tags": [
+                    "Locations"
+                ]
+            },
+            "delete": {
+                "operationId": "LocationsController_remove",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Delete a location (soft delete)",
+                "tags": [
+                    "Locations"
+                ]
+            }
+        },
+        "/locations/{id}/opening-hours": {
+            "put": {
+                "operationId": "LocationsController_setOpeningHours",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SetOpeningHoursDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Replace the weekly opening hours",
+                "tags": [
+                    "Locations"
+                ]
+            }
+        },
+        "/locations/{id}/unavailable-periods": {
+            "post": {
+                "operationId": "LocationsController_addUnavailablePeriod",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateUnavailablePeriodDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Add an unavailable period",
+                "tags": [
+                    "Locations"
+                ]
+            },
+            "get": {
+                "operationId": "LocationsController_listUnavailablePeriods",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "List unavailable periods",
+                "tags": [
+                    "Locations"
+                ]
+            }
+        },
+        "/locations/{id}/unavailable-periods/{periodId}": {
+            "delete": {
+                "operationId": "LocationsController_removeUnavailablePeriod",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "periodId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Remove an unavailable period",
+                "tags": [
+                    "Locations"
+                ]
+            }
+        },
+        "/bookings": {
+            "post": {
+                "operationId": "BookingsController_create",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateBookingDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Book a court (price calculated on the server)",
+                "tags": [
+                    "Bookings"
+                ]
+            },
+            "get": {
+                "operationId": "BookingsController_findAll",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "default": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "maximum": 100,
+                            "default": 10,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "CONFIRMED",
+                                "CANCELLED"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "period",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "upcoming",
+                                "past"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "locationId",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "courtId",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "dateFrom",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "2026-10-01",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "dateTo",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "2026-10-31",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "List bookings (consumers: their own; club admins: the whole club)",
+                "tags": [
+                    "Bookings"
+                ]
+            }
+        },
+        "/bookings/{id}": {
+            "get": {
+                "operationId": "BookingsController_findOne",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Get one booking",
+                "tags": [
+                    "Bookings"
+                ]
+            }
+        },
+        "/bookings/{id}/cancel": {
+            "patch": {
+                "operationId": "BookingsController_cancel",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Cancel a booking before it starts",
+                "tags": [
+                    "Bookings"
+                ]
+            }
+        },
+        "/pricing/shifts": {
+            "post": {
+                "operationId": "PricingController_createShift",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateShiftDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Create a pricing shift for a location",
+                "tags": [
+                    "Pricing"
+                ]
+            }
+        },
+        "/pricing/locations/{locationId}/shifts": {
+            "get": {
+                "operationId": "PricingController_listShifts",
+                "parameters": [
+                    {
+                        "name": "locationId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "List the shifts of a location",
+                "tags": [
+                    "Pricing"
+                ]
+            }
+        },
+        "/pricing/shifts/{id}": {
+            "put": {
+                "operationId": "PricingController_updateShift",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateShiftDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Update a shift (name or times)",
+                "tags": [
+                    "Pricing"
+                ]
+            },
+            "delete": {
+                "operationId": "PricingController_removeShift",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Delete a shift and its prices",
+                "tags": [
+                    "Pricing"
+                ]
+            }
+        },
+        "/pricing/courts/{courtId}": {
+            "put": {
+                "operationId": "PricingController_setCourtPrices",
+                "parameters": [
+                    {
+                        "name": "courtId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SetCourtPricesDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Replace the full price list of a court",
+                "tags": [
+                    "Pricing"
+                ]
+            },
+            "get": {
+                "operationId": "PricingController_getCourtPrices",
+                "parameters": [
+                    {
+                        "name": "courtId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Get a court price list (admins also see missing prices)",
+                "tags": [
+                    "Pricing"
+                ]
+            }
+        },
+        "/pricing/quote": {
+            "get": {
+                "operationId": "PricingController_quote",
+                "parameters": [
+                    {
+                        "name": "courtId",
+                        "required": true,
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "membershipId",
+                        "required": false,
+                        "in": "query",
+                        "description": "Membership-based clubs: preview the price of this plan. Required for admins; consumers default to their own active membership.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "startTime",
+                        "required": true,
+                        "in": "query",
+                        "schema": {
+                            "example": "08:30",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "durationMinutes",
+                        "required": true,
+                        "in": "query",
+                        "schema": {
+                            "example": 60,
+                            "type": "number"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Calculate the price for a court, start time and duration",
+                "tags": [
+                    "Pricing"
+                ]
+            }
+        },
+        "/memberships": {
+            "post": {
+                "operationId": "MembershipsController_create",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateMembershipDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Create a membership plan",
+                "tags": [
+                    "Memberships"
+                ]
+            },
+            "get": {
+                "operationId": "MembershipsController_findAll",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "List membership plans with their prices",
+                "tags": [
+                    "Memberships"
+                ]
+            }
+        },
+        "/memberships/{id}": {
+            "get": {
+                "operationId": "MembershipsController_findOne",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Get one plan (admins also see missing prices)",
+                "tags": [
+                    "Memberships"
+                ]
+            },
+            "put": {
+                "operationId": "MembershipsController_update",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateMembershipDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Update a plan (name, description, validity, active)",
+                "tags": [
+                    "Memberships"
+                ]
+            },
+            "delete": {
+                "operationId": "MembershipsController_remove",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Delete a plan (blocked while consumers hold it)",
+                "tags": [
+                    "Memberships"
+                ]
+            }
+        },
+        "/memberships/{id}/prices": {
+            "put": {
+                "operationId": "MembershipsController_setPrices",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SetMembershipPricesDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Replace the full price list of a plan",
+                "tags": [
+                    "Memberships"
+                ]
+            }
+        },
+        "/memberships/{id}/subscribe": {
+            "post": {
+                "operationId": "MembershipsController_subscribe",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Subscribe to a plan (no payment in this assessment)",
+                "tags": [
+                    "Memberships"
+                ]
+            }
+        },
+        "/me/membership": {
+            "get": {
+                "operationId": "MeMembershipController_mine",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "My current membership, all active ones, and history",
+                "tags": [
+                    "Memberships"
+                ]
+            }
+        },
+        "/me/membership/{id}": {
+            "delete": {
+                "operationId": "MeMembershipController_cancel",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Cancel one of my memberships (ends immediately)",
+                "tags": [
+                    "Memberships"
+                ]
+            }
+        },
+        "/locations/{locationId}/courts": {
+            "post": {
+                "operationId": "CourtsController_create",
+                "parameters": [
+                    {
+                        "name": "locationId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateCourtDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Create a court in a location",
+                "tags": [
+                    "Courts"
+                ]
+            },
+            "get": {
+                "operationId": "CourtsController_findByLocation",
+                "parameters": [
+                    {
+                        "name": "locationId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "List courts of a location",
+                "tags": [
+                    "Courts"
+                ]
+            }
+        },
+        "/courts/{id}": {
+            "get": {
+                "operationId": "CourtsController_findOne",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Get one court with its effective hours and durations",
+                "tags": [
+                    "Courts"
+                ]
+            },
+            "put": {
+                "operationId": "CourtsController_update",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateCourtDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Update court details, durations or active status",
+                "tags": [
+                    "Courts"
+                ]
+            },
+            "delete": {
+                "operationId": "CourtsController_remove",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Delete a court (soft delete)",
+                "tags": [
+                    "Courts"
+                ]
+            }
+        },
+        "/courts/{id}/opening-hours": {
+            "put": {
+                "operationId": "CourtsController_setOpeningHours",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SetCourtOpeningHoursDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Set custom court hours, or go back to the location hours",
+                "tags": [
+                    "Courts"
+                ]
+            }
+        },
+        "/availability": {
+            "get": {
+                "operationId": "AvailabilityController_getAvailability",
+                "parameters": [
+                    {
+                        "name": "locationId",
+                        "required": true,
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "date",
+                        "required": true,
+                        "in": "query",
+                        "schema": {
+                            "example": "2026-10-14",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "durationMinutes",
+                        "required": true,
+                        "in": "query",
+                        "schema": {
+                            "example": 60,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "membershipId",
+                        "required": false,
+                        "in": "query",
+                        "description": "Membership-based clubs only: preview the prices of this plan. Required for admins; consumers default to their own memberships.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Bookable slots (with prices) per court for a location, date and duration",
+                "tags": [
+                    "Availability"
+                ]
+            }
+        }
+    },
+    "info": {
+        "title": "Club Management API",
+        "description": "Multi-tenant court booking platform.\n\n**Try it:** call `POST /auth/login`, copy the `accessToken`, click **Authorize** and paste it.\n\n- Platform admin: login without `clubSlug`.\n- Club admin and consumers: `clubSlug` + email + password.\n- Times are `HH:mm` in the club timezone. `dayOfWeek`: 0 = Sunday ... 6 = Saturday.\n- Errors always look like `{ statusCode, error, message, errors?, path, timestamp }`.",
+        "version": "1.0",
+        "contact": {}
+    },
+    "tags": [],
+    "servers": [],
+    "components": {
+        "securitySchemes": {
+            "bearer": {
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "type": "http"
+            }
+        },
+        "schemas": {
+            "RegisterDto": {
+                "type": "object",
+                "properties": {
+                    "clubSlug": {
+                        "type": "string",
+                        "example": "downtown-sports"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Aisha Khan"
+                    },
+                    "email": {
+                        "type": "string",
+                        "example": "aisha@example.com"
+                    },
+                    "password": {
+                        "type": "string",
+                        "example": "StrongPass123"
+                    }
+                },
+                "required": [
+                    "clubSlug",
+                    "name",
+                    "email",
+                    "password"
+                ]
+            },
+            "LoginDto": {
+                "type": "object",
+                "properties": {
+                    "clubSlug": {
+                        "type": "string",
+                        "example": "downtown-sports",
+                        "description": "Required for club admins and consumers. Omit for the platform admin."
+                    },
+                    "email": {
+                        "type": "string",
+                        "example": "aisha@example.com"
+                    },
+                    "password": {
+                        "type": "string",
+                        "example": "StrongPass123"
+                    }
+                },
+                "required": [
+                    "email",
+                    "password"
+                ]
+            },
+            "RefreshDto": {
+                "type": "object",
+                "properties": {
+                    "refreshToken": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "refreshToken"
+                ]
+            },
+            "CreateTenantDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Downtown Sports Club"
+                    },
+                    "slug": {
+                        "type": "string",
+                        "example": "downtown-sports"
+                    },
+                    "pricingModel": {
+                        "type": "string",
+                        "enum": [
+                            "SHIFT_BASED",
+                            "MEMBERSHIP_BASED"
+                        ],
+                        "example": "SHIFT_BASED"
+                    },
+                    "timezone": {
+                        "type": "string",
+                        "example": "Asia/Kolkata"
+                    },
+                    "adminName": {
+                        "type": "string",
+                        "example": "Club Owner"
+                    },
+                    "adminEmail": {
+                        "type": "string",
+                        "example": "owner@downtown.com"
+                    },
+                    "adminPassword": {
+                        "type": "string",
+                        "example": "StrongPass123"
+                    }
+                },
+                "required": [
+                    "name",
+                    "slug",
+                    "pricingModel",
+                    "adminName",
+                    "adminEmail",
+                    "adminPassword"
+                ]
+            },
+            "UpdateTenantDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Downtown Sports Club Ltd"
+                    },
+                    "timezone": {
+                        "type": "string",
+                        "example": "Asia/Dubai"
+                    }
+                }
+            },
+            "UpdateTenantStatusDto": {
+                "type": "object",
+                "properties": {
+                    "isActive": {
+                        "type": "boolean",
+                        "example": false
+                    }
+                },
+                "required": [
+                    "isActive"
+                ]
+            },
+            "CreateLocationDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Downtown Sports Center"
+                    },
+                    "address": {
+                        "type": "string",
+                        "example": "12 Main Street, Dubai"
+                    },
+                    "details": {
+                        "type": "string",
+                        "example": "Indoor courts, free parking"
+                    },
+                    "durations": {
+                        "example": [
+                            30,
+                            60,
+                            90,
+                            120
+                        ],
+                        "type": "array",
+                        "items": {
+                            "type": "number"
+                        }
+                    }
+                },
+                "required": [
+                    "name",
+                    "address",
+                    "durations"
+                ]
+            },
+            "UpdateLocationDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Downtown Sports Center"
+                    },
+                    "address": {
+                        "type": "string",
+                        "example": "12 Main Street, Dubai"
+                    },
+                    "details": {
+                        "type": "string",
+                        "example": "Indoor courts, free parking"
+                    },
+                    "durations": {
+                        "example": [
+                            30,
+                            60,
+                            90,
+                            120
+                        ],
+                        "type": "array",
+                        "items": {
+                            "type": "number"
+                        }
+                    },
+                    "isActive": {
+                        "type": "boolean",
+                        "example": true
+                    }
+                }
+            },
+            "OpeningHourDto": {
+                "type": "object",
+                "properties": {
+                    "dayOfWeek": {
+                        "type": "number",
+                        "example": 1,
+                        "description": "0=Sunday ... 6=Saturday"
+                    },
+                    "openTime": {
+                        "type": "string",
+                        "example": "06:00"
+                    },
+                    "closeTime": {
+                        "type": "string",
+                        "example": "12:00",
+                        "description": "\"24:00\" means midnight at end of day"
+                    }
+                },
+                "required": [
+                    "dayOfWeek",
+                    "openTime",
+                    "closeTime"
+                ]
+            },
+            "SetOpeningHoursDto": {
+                "type": "object",
+                "properties": {
+                    "openingHours": {
+                        "description": "Complete weekly schedule. Days not listed are closed. Repeat a day for multiple periods.",
+                        "example": [
+                            {
+                                "dayOfWeek": 1,
+                                "openTime": "06:00",
+                                "closeTime": "12:00"
+                            },
+                            {
+                                "dayOfWeek": 1,
+                                "openTime": "14:00",
+                                "closeTime": "23:00"
+                            }
+                        ],
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/OpeningHourDto"
+                        }
+                    }
+                },
+                "required": [
+                    "openingHours"
+                ]
+            },
+            "CreateUnavailablePeriodDto": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "example": "2026-12-25"
+                    },
+                    "startTime": {
+                        "type": "string",
+                        "example": "10:00"
+                    },
+                    "endTime": {
+                        "type": "string",
+                        "example": "15:00"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "example": "Christmas Event"
+                    }
+                },
+                "required": [
+                    "date",
+                    "startTime",
+                    "endTime"
+                ]
+            },
+            "CreateBookingDto": {
+                "type": "object",
+                "properties": {
+                    "courtId": {
+                        "type": "string"
+                    },
+                    "date": {
+                        "type": "string",
+                        "example": "2026-10-13"
+                    },
+                    "startTime": {
+                        "type": "string",
+                        "example": "08:30"
+                    },
+                    "durationMinutes": {
+                        "type": "number",
+                        "example": 60
+                    },
+                    "expectedPrice": {
+                        "type": "number",
+                        "example": 17.5,
+                        "description": "The price the user saw. If the real price differs, the booking is rejected with 409."
+                    }
+                },
+                "required": [
+                    "courtId",
+                    "date",
+                    "startTime",
+                    "durationMinutes"
+                ]
+            },
+            "CreateShiftDto": {
+                "type": "object",
+                "properties": {
+                    "locationId": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Morning Peak"
+                    },
+                    "startTime": {
+                        "type": "string",
+                        "example": "06:00"
+                    },
+                    "endTime": {
+                        "type": "string",
+                        "example": "09:00",
+                        "description": "\"24:00\" means end of day"
+                    }
+                },
+                "required": [
+                    "locationId",
+                    "name",
+                    "startTime",
+                    "endTime"
+                ]
+            },
+            "UpdateShiftDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Morning Peak"
+                    },
+                    "startTime": {
+                        "type": "string",
+                        "example": "06:00"
+                    },
+                    "endTime": {
+                        "type": "string",
+                        "example": "09:00",
+                        "description": "\"24:00\" means end of day"
+                    }
+                }
+            },
+            "CourtPriceDto": {
+                "type": "object",
+                "properties": {
+                    "durationMinutes": {
+                        "type": "number",
+                        "example": 60
+                    },
+                    "shiftId": {
+                        "type": "object",
+                        "nullable": true,
+                        "description": "Shift id. Omit or send null for the Normal (default) price."
+                    },
+                    "price": {
+                        "type": "number",
+                        "example": 20
+                    }
+                },
+                "required": [
+                    "durationMinutes",
+                    "price"
+                ]
+            },
+            "SetCourtPricesDto": {
+                "type": "object",
+                "properties": {
+                    "prices": {
+                        "description": "The complete price list for the court. Anything not listed is removed.",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/CourtPriceDto"
+                        }
+                    }
+                },
+                "required": [
+                    "prices"
+                ]
+            },
+            "CreateMembershipDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Premium"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Discounted rates on every duration"
+                    },
+                    "validityDays": {
+                        "type": "number",
+                        "example": 30,
+                        "description": "How many days a subscription lasts"
+                    }
+                },
+                "required": [
+                    "name",
+                    "validityDays"
+                ]
+            },
+            "UpdateMembershipDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Premium"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Discounted rates on every duration"
+                    },
+                    "validityDays": {
+                        "type": "number",
+                        "example": 30,
+                        "description": "How many days a subscription lasts"
+                    },
+                    "isActive": {
+                        "type": "boolean",
+                        "example": true
+                    }
+                }
+            },
+            "MembershipPriceDto": {
+                "type": "object",
+                "properties": {
+                    "durationMinutes": {
+                        "type": "number",
+                        "example": 60
+                    },
+                    "price": {
+                        "type": "number",
+                        "example": 18
+                    }
+                },
+                "required": [
+                    "durationMinutes",
+                    "price"
+                ]
+            },
+            "SetMembershipPricesDto": {
+                "type": "object",
+                "properties": {
+                    "prices": {
+                        "description": "The complete price list of the plan. Anything not listed is removed.",
+                        "example": [
+                            {
+                                "durationMinutes": 30,
+                                "price": 10
+                            },
+                            {
+                                "durationMinutes": 60,
+                                "price": 18
+                            },
+                            {
+                                "durationMinutes": 90,
+                                "price": 25
+                            }
+                        ],
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MembershipPriceDto"
+                        }
+                    }
+                },
+                "required": [
+                    "prices"
+                ]
+            },
+            "CreateCourtDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Court 1"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Indoor, glass walls"
+                    },
+                    "durations": {
+                        "nullable": true,
+                        "example": [
+                            60,
+                            90
+                        ],
+                        "description": "Optional subset of the location durations. Omit (or send null on update) to offer all of them.",
+                        "type": "array",
+                        "items": {
+                            "type": "number"
+                        }
+                    }
+                },
+                "required": [
+                    "name"
+                ]
+            },
+            "UpdateCourtDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Court 1"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Indoor, glass walls"
+                    },
+                    "durations": {
+                        "nullable": true,
+                        "example": [
+                            60,
+                            90
+                        ],
+                        "description": "Optional subset of the location durations. Omit (or send null on update) to offer all of them.",
+                        "type": "array",
+                        "items": {
+                            "type": "number"
+                        }
+                    },
+                    "isActive": {
+                        "type": "boolean",
+                        "example": true
+                    }
+                }
+            },
+            "SetCourtOpeningHoursDto": {
+                "type": "object",
+                "properties": {
+                    "useLocationHours": {
+                        "type": "boolean",
+                        "example": false,
+                        "description": "true = follow the location hours (clears custom hours)"
+                    },
+                    "openingHours": {
+                        "description": "Required when useLocationHours is false. Days not listed are closed for this court.",
+                        "example": [
+                            {
+                                "dayOfWeek": 1,
+                                "openTime": "06:00",
+                                "closeTime": "12:00"
+                            },
+                            {
+                                "dayOfWeek": 1,
+                                "openTime": "14:00",
+                                "closeTime": "23:00"
+                            }
+                        ],
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/OpeningHourDto"
+                        }
+                    }
+                },
+                "required": [
+                    "useLocationHours"
+                ]
+            }
+        }
+    }
+}

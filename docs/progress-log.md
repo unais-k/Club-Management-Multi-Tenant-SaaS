@@ -298,3 +298,22 @@ A slot is bookable only if the whole range lies inside one free window.
 **Tenant isolation:** every booking query filters by club_id; consumers additionally by user_id.
 
 **Known limitations:** opening hours are read just before the lock (admin config edited in that instant is not seen); changing opening hours, court hours or durations does not re-check existing bookings; a consumer can hold overlapping bookings on different courts; no payment step; no cancellation deadline or refund rules; the constraint is created at startup (it moves into a migration in the wrap-up).
+
+## Step 12: Backend wrap-up
+
+**Goal:** Make the backend reproducible, safer and documented.
+
+**Done:**
+
+- Migrations replace `synchronize` (TypeORM CLI run with tsx; data source in `src/database`). The booking overlap constraint is now declared on the entity (`@Exclusion`), so it ships inside the migration.
+- Seed script (`npm run seed`, `seed:reset`): two demo clubs (shift-based and membership-based) with locations, courts, shifts, plans, users and bookings; idempotent
+- Env validation at startup (required keys, secrets at least 32 characters and different); CORS limited to the admin panel and the consumer site
+- One error format for every response (`statusCode, error, message, errors?, path, timestamp`); unexpected errors are logged but never leaked
+- Rate limiting: 120 requests per minute per IP in general, 10 per minute on login, register and refresh
+- Swagger description, persistent authorization; OpenAPI JSON exported to `docs/openapi.json`
+- `scripts/isolation-test.mjs`: logs in as users of two clubs and checks that every cross-tenant read and write returns 404, plus authentication and role checks
+- ERD, architecture diagram and the README (backend sections)
+
+**Ports:** API 3000, admin panel 5173, consumer site 3001.
+
+**Known limitations:** see README (child-table `clubId` is not a composite foreign key; changing hours or durations does not re-check existing bookings).
