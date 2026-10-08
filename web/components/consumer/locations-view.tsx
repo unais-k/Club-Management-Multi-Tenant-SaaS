@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { ArrowRight, Clock3, MapPin, RefreshCw, SlidersHorizontal, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore, type AuthUser } from "@/store/auth-store";
@@ -79,7 +80,7 @@ export function LocationsView({ profile, onSignOut }: Props) {
       <header className="border-b border-[#e6ebe6] bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
           <div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-[#173c2c] text-[#d4f36b]"><Trophy size={20} /></div><div><p className="font-heading text-base font-semibold">CourtSide</p><p className="text-xs text-[#859087]">{profile.club?.name ?? "Your club"}</p></div></div>
-          <div className="flex items-center gap-3"><span className="hidden text-sm text-[#69766d] sm:block">Hi, {profile.name.split(" ")[0]}</span><Button onClick={onSignOut} variant="outline" className="h-9 rounded-lg border-[#dfe6df] px-3 text-xs">Sign out</Button></div>
+          <div className="flex items-center gap-2"><span className="hidden text-sm text-[#69766d] sm:block">Hi, {profile.name.split(" ")[0]}</span><Link href="/memberships" className="inline-flex h-9 items-center rounded-lg px-3 text-xs font-medium text-[#526158] hover:bg-[#f2f5f1]">Memberships</Link><Button onClick={onSignOut} variant="outline" className="h-9 rounded-lg border-[#dfe6df] px-3 text-xs">Sign out</Button></div>
         </div>
       </header>
       <section className="mx-auto max-w-6xl px-5 pb-16 pt-10 sm:px-8 sm:pt-14">

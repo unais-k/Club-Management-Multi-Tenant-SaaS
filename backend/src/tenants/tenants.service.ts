@@ -13,7 +13,8 @@ import { LocationUnavailablePeriod } from '../locations/entities/location-unavai
 import { Location } from '../locations/entities/location.entity.js';
 import { CourtPrice } from '../pricing/entities/court-price.entity.js';
 import { PricingShift } from '../pricing/entities/pricing-shift.entity.js';
-import { UserRole } from '../common/enums/index.js';
+import { PricingModel, UserRole } from '../common/enums/index.js';
+import { Membership } from '../memberships/entities/membership.entity.js';
 import { User } from '../users/entities/user.entity.js';
 import { CreateTenantDto } from './dto/create-tenant.dto.js';
 import { ListTenantsQueryDto } from './dto/list-tenants-query.dto.js';
@@ -35,6 +36,8 @@ export class TenantsService {
     private readonly shiftRepo: Repository<PricingShift>,
     @InjectRepository(CourtPrice)
     private readonly priceRepo: Repository<CourtPrice>,
+    @InjectRepository(Membership)
+    private readonly membershipRepo: Repository<Membership>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -144,6 +147,15 @@ export class TenantsService {
           order: { durationMinutes: 'ASC' },
         })
       : [];
+    const membershipPlans = tenant.pricingModel === PricingModel.MEMBERSHIP_BASED
+      ? await this.membershipRepo.find({
+          where: { clubId: tenant.id },
+          relations: { prices: true },
+          order: { name: 'ASC' },
+        })
+      : [];
+    const clubDurations = [...new Set(locations.flatMap((location) => location.durations))]
+      .sort((a, b) => a - b);
     const shiftsByLocation = new Map<string, typeof shifts>();
     for (const shift of shifts) {
       shiftsByLocation.set(shift.locationId, [
@@ -162,6 +174,19 @@ export class TenantsService {
         isActive: tenant.isActive,
         timezone: tenant.timezone,
       },
+      membershipPlans: membershipPlans.map((plan) => ({
+        id: plan.id,
+        name: plan.name,
+        description: plan.description,
+        validityDays: plan.validityDays,
+        isActive: plan.isActive,
+        prices: [...(plan.prices ?? [])]
+          .sort((a, b) => a.durationMinutes - b.durationMinutes)
+          .map((price) => ({ durationMinutes: price.durationMinutes, price: price.price })),
+        missingDurations: clubDurations.filter(
+          (duration) => !plan.prices?.some((price) => price.durationMinutes === duration),
+        ),
+      })),
       dateRange: { today, through, days: 7, dayOfWeek },
       locations: locations.map((location) => ({
         id: location.id,

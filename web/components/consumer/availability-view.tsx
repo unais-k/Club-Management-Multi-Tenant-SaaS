@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { ArrowLeft, BadgeCheck, CalendarDays, Clock3, RefreshCw, TicketCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -162,7 +163,7 @@ export function AvailabilityView({ location, profile, onBack, onSignOut }: { loc
 
   return (
     <main className="min-h-screen bg-[#f6f8f5] text-[#19251e]">
-      <header className="border-b border-[#e6ebe6] bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8"><Button onClick={onBack} variant="ghost" className="h-9 rounded-lg px-2 text-sm text-[#526158]"><ArrowLeft size={16} className="mr-2"/>Locations</Button><div className="flex items-center gap-3"><span className="hidden font-heading text-sm font-semibold sm:inline">{location.name}</span><Button onClick={onSignOut} variant="outline" className="h-9 rounded-lg border-[#dfe6df] px-3 text-xs">Sign out</Button></div></div></header>
+      <header className="border-b border-[#e6ebe6] bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8"><Button onClick={onBack} variant="ghost" className="h-9 rounded-lg px-2 text-sm text-[#526158]"><ArrowLeft size={16} className="mr-2"/>Locations</Button><div className="flex items-center gap-2"><span className="hidden font-heading text-sm font-semibold sm:inline">{location.name}</span><Link href="/memberships" className="inline-flex h-9 items-center rounded-lg px-3 text-xs font-medium text-[#526158] hover:bg-[#f2f5f1]">Memberships</Link><Button onClick={onSignOut} variant="outline" className="h-9 rounded-lg border-[#dfe6df] px-3 text-xs">Sign out</Button></div></div></header>
       <section className="mx-auto max-w-6xl px-5 pb-16 pt-9 sm:px-8 sm:pt-12">
         <p className="mb-2 text-sm font-medium text-[#568167]">{location.address}</p><h1 className="font-heading text-3xl font-semibold tracking-[-.035em] sm:text-4xl">Find a time to play</h1><p className="mt-2 text-sm text-[#738077]">Choose a day and session length to see live court availability.</p>
         <div className="mt-8 rounded-2xl border border-[#e4eae4] bg-white p-5 sm:p-6">

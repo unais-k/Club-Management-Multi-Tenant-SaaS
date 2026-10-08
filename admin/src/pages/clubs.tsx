@@ -55,6 +55,15 @@ interface UnavailablePeriod {
 
 interface TenantOperations {
   tenant: Tenant
+  membershipPlans: Array<{
+    id: string
+    name: string
+    description: string | null
+    validityDays: number
+    isActive: boolean
+    prices: Array<{ durationMinutes: number; price: number }>
+    missingDurations: number[]
+  }>
   dateRange: { today: string; through: string; days: number; dayOfWeek: number }
   locations: Array<{
     id: string
@@ -250,6 +259,45 @@ function StatusBadge({ active }: { active: boolean }) {
 function ScheduleSummary({ data }: { data: TenantOperations }) {
   return (
     <div className="space-y-6 border-t border-border pt-5">
+      {data.tenant.pricingModel === 'MEMBERSHIP_BASED' && (
+        <section>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-semibold"><Coins className="size-4 text-primary" />Membership plan pricing</h3>
+              <p className="mt-1 text-[11px] text-muted-foreground">Plans and court-session prices configured by this club.</p>
+            </div>
+            <span className="mt-2 w-fit rounded-full bg-muted px-2.5 py-1 text-[10px] font-medium text-muted-foreground sm:mt-0">Prices by duration · club-wide</span>
+          </div>
+          {data.membershipPlans.length === 0 ? (
+            <p className="mt-4 rounded-xl border border-dashed border-border px-4 py-6 text-center text-xs text-muted-foreground">No membership plans have been created for this club yet.</p>
+          ) : (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {data.membershipPlans.map((plan) => (
+                <article key={plan.id} className="rounded-xl border border-border bg-background p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="truncate text-xs font-semibold">{plan.name}</h4>
+                      <p className="mt-1 text-[10px] text-muted-foreground">Valid for {plan.validityDays} days</p>
+                    </div>
+                    <StatusBadge active={plan.isActive} />
+                  </div>
+                  {plan.description && <p className="mt-2 text-[11px] leading-4 text-muted-foreground">{plan.description}</p>}
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {plan.prices.map((price) => (
+                      <span key={`${plan.id}-${price.durationMinutes}`} className="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground">
+                        {price.durationMinutes} min · <span className="font-bold tracking-wide">${price.price.toFixed(2)}</span>
+                      </span>
+                    ))}
+                    {plan.prices.length === 0 && <span className="text-[10px] text-muted-foreground">No duration prices configured.</span>}
+                  </div>
+                  {plan.missingDurations.length > 0 && <p className="mt-2 text-[10px] text-amber-800">Missing prices for: {plan.missingDurations.map((duration) => `${duration} min`).join(', ')}</p>}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       <section>
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -338,22 +386,18 @@ function ScheduleSummary({ data }: { data: TenantOperations }) {
                       )}
                     </div>
 
-                    <div>
+                    {data.tenant.pricingModel === 'SHIFT_BASED' && <div>
                       <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Coins className="size-3.5" />Pricing setup</p>
-                      {data.tenant.pricingModel === 'SHIFT_BASED' ? (
-                        <>
-                          {location.pricingShifts.length > 0 && <p className="mt-2 text-[10px] text-muted-foreground">Shifts: {location.pricingShifts.map((shift) => `${shift.name} ${shift.startTime}–${shift.endTime}`).join(' · ')}</p>}
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {location.courts.flatMap((court) => court.prices.map((price) => (
-                              <span key={`${court.id}-${price.durationMinutes}-${price.shiftId ?? 'normal'}`} className="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground">
-                                {court.name} · {price.durationMinutes} min · {price.shiftName} · {price.price.toFixed(2)}
-                              </span>
-                            )))}
-                            {location.courts.every((court) => court.prices.length === 0) && <span className="text-[10px] text-muted-foreground">No court prices configured yet.</span>}
-                          </div>
-                        </>
-                      ) : <p className="mt-2 text-[10px] text-muted-foreground">This club uses membership-based pricing. Membership pricing details aren’t part of the current admin API.</p>}
-                    </div>
+                      {location.pricingShifts.length > 0 && <p className="mt-2 text-[10px] text-muted-foreground">Shifts: {location.pricingShifts.map((shift) => `${shift.name} ${shift.startTime}–${shift.endTime}`).join(' · ')}</p>}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {location.courts.flatMap((court) => court.prices.map((price) => (
+                          <span key={`${court.id}-${price.durationMinutes}-${price.shiftId ?? 'normal'}`} className="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground">
+                            {court.name} · {price.durationMinutes} min · {price.shiftName} · {price.price.toFixed(2)}
+                          </span>
+                        )))}
+                        {location.courts.every((court) => court.prices.length === 0) && <span className="text-[10px] text-muted-foreground">No court prices configured yet.</span>}
+                      </div>
+                    </div>}
                   </div>
                 </details>
               )
