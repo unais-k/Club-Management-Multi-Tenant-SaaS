@@ -3,6 +3,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Exclusion,
   Index,
   JoinColumn,
   ManyToOne,
@@ -16,6 +17,10 @@ import { Location } from '../../locations/entities/location.entity.js';
 import { User } from '../../users/entities/user.entity.js';
 
 @Entity('bookings')
+@Exclusion(
+  'EXCL_bookings_no_overlap',
+  `USING gist ("courtId" WITH =, "date" WITH =, int4range("startMinute"::int, "endMinute"::int) WITH &&) WHERE ("status" = 'CONFIRMED')`,
+)
 // Availability and the overlap check read "confirmed bookings of one court on one date"
 @Index(['courtId', 'date'], { where: `"status" = 'CONFIRMED'` })
 @Index(['clubId', 'locationId', 'date'])
