@@ -14,6 +14,11 @@ export class ApiError extends Error {
   }
 }
 
+function announceApiError(message: string, status?: number) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('club-admin:api-error', { detail: { message, status } }))
+}
+
 type ApiOptions = RequestInit & {
   authenticated?: boolean
   retryAfterRefresh?: boolean
@@ -91,10 +96,16 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
     requestHeaders.set('Authorization', `Bearer ${accessToken}`)
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...requestOptions,
-    headers: requestHeaders,
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...requestOptions,
+      headers: requestHeaders,
+    })
+  } catch (error) {
+    announceApiError('Could not reach the server. Check your connection and try again.')
+    throw error
+  }
 
   if (
     response.status === 401 &&
@@ -117,6 +128,7 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
     } catch {
       // Keep the status-based message when the response has no JSON body.
     }
+    announceApiError(message, response.status)
     throw new ApiError(message, response.status)
   }
 

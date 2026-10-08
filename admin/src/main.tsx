@@ -4,11 +4,13 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from '@/auth/auth-context'
+import { ApiErrorToast } from '@/components/api-error-toast'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
+        <ApiErrorToast />
         <App />
       </AuthProvider>
     </BrowserRouter>

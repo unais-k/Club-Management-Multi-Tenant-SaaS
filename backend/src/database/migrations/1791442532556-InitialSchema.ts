@@ -4,6 +4,10 @@ export class InitialSchema1791442532556 implements MigrationInterface {
     name = 'InitialSchema1791442532556'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
+        // These extensions provide uuid_generate_v4() and the GiST equality
+        // operators used by the booking overlap constraint below.
+        await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+        await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS btree_gist`);
         await queryRunner.query(`CREATE TYPE "public"."users_role_enum" AS ENUM('PLATFORM_ADMIN', 'CLUB_ADMIN', 'CONSUMER')`);
         await queryRunner.query(`CREATE TABLE "users" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "clubId" uuid, "name" character varying(150) NOT NULL, "email" character varying(190) NOT NULL, "passwordHash" character varying(255) NOT NULL, "role" "public"."users_role_enum" NOT NULL, "isActive" boolean NOT NULL DEFAULT true, "refreshTokenHash" character varying(255), "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE UNIQUE INDEX "IDX_43e58c12f5a6f62f5d1fccff31" ON "users"  ("clubId", "email") `);
