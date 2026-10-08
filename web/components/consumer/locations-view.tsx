@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Clock3, MapPin, RefreshCw, SlidersHorizontal, Trophy } from "lucide-react";
+import { ArrowRight, Clock3, MapPin, RefreshCw, SlidersHorizontal, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore, type AuthUser } from "@/store/auth-store";
+import { AvailabilityView } from "@/components/consumer/availability-view";
 
 type LocationOpeningHour = { dayOfWeek: number; openTime: string; closeTime: string };
 type ClubLocation = {
@@ -34,6 +35,7 @@ export function LocationsView({ profile, onSignOut }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [today, setToday] = useState<number | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<ClubLocation | null>(null);
 
   const loadLocations = useCallback(async () => {
     const token = useAuthStore.getState().accessToken;
@@ -68,6 +70,10 @@ export function LocationsView({ profile, onSignOut }: Props) {
 
   const todayName = today === null ? "Today" : weekdays[today];
 
+  if (selectedLocation) {
+    return <AvailabilityView location={selectedLocation} profile={profile} onBack={() => setSelectedLocation(null)} onSignOut={onSignOut} />;
+  }
+
   return (
     <main className="min-h-screen bg-[#f6f8f5] text-[#19251e]">
       <header className="border-b border-[#e6ebe6] bg-white">
@@ -88,10 +94,11 @@ export function LocationsView({ profile, onSignOut }: Props) {
         {!loading && !error && locations.length > 0 && <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{locations.map((location) => {
           const hoursToday = today === null ? [] : location.openingHours.filter((hours) => hours.dayOfWeek === today);
           return <article key={location.id} className="group overflow-hidden rounded-2xl border border-[#e4eae4] bg-white transition hover:-translate-y-0.5 hover:border-[#c8d8ca] hover:shadow-[0_15px_40px_-28px_rgba(23,60,44,.38)]">
-            <div className="relative flex h-28 items-end overflow-hidden bg-[linear-gradient(135deg,#1c5138,#2c6949_55%,#91a94d)] p-5"><div className="absolute -right-4 -top-14 size-44 rounded-full border border-white/15"/><div className="absolute right-9 -top-5 size-28 rounded-full border border-white/15"/><div className="relative flex size-11 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-[#e4f5c0]"><MapPin size={20}/></div><span className="relative ml-auto rounded-full bg-[#d4f36b] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#29431d]">{hoursToday.length ? "Open today" : "Closed today"}</span></div>
+            <div className="relative flex h-28 items-end overflow-hidden bg-[linear-gradient(135deg,#1c5138,#2c6949_55%,#91a94d)] p-5"><div className="absolute -right-4 -top-14 size-44 rounded-full border border-white/15"/><div className="absolute right-9 -top-5 size-28 rounded-full border border-white/15"/><div className="relative flex size-11 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-[#e4f5c0]"><MapPin size={20}/></div><span className="relative ml-auto rounded-full bg-[#d4f36b] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#29431d]">{hoursToday.length ? "Hours today" : "No hours today"}</span></div>
             <div className="p-5"><h2 className="font-heading text-lg font-semibold tracking-tight">{location.name}</h2><p className="mt-2 flex items-start gap-2 text-sm leading-5 text-[#738077]"><MapPin size={15} className="mt-0.5 shrink-0"/>{location.address}</p>{location.details && <p className="mt-3 line-clamp-2 text-sm leading-5 text-[#89938b]">{location.details}</p>}
               <div className="mt-5 border-t border-[#edf0ed] pt-4"><div className="flex items-center gap-2 text-xs font-semibold text-[#58675c]"><Clock3 size={14} className="text-[#568167]"/>Today · {todayName}</div><p className="mt-2 pl-[22px] text-sm text-[#738077]">{hoursToday.length ? hoursToday.map((hours) => `${hours.openTime} – ${hours.closeTime}`).join(" · ") : "No opening hours listed"}</p></div>
               <div className="mt-4 flex flex-wrap gap-1.5">{location.durations.map((duration) => <span key={duration} className="rounded-md bg-[#f0f4ef] px-2 py-1 text-[11px] font-medium text-[#637266]">{formatDuration(duration)}</span>)}</div>
+              <Button onClick={() => setSelectedLocation(location)} className="mt-5 h-10 w-full rounded-lg bg-[#1c5138] text-sm text-white hover:bg-[#17452f]">View availability <ArrowRight size={15} className="ml-2" /></Button>
             </div>
           </article>;
         })}</div>}
