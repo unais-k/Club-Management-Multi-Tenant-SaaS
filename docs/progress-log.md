@@ -241,8 +241,8 @@ A slot is bookable only if the whole range lies inside one free window.
 
 **Known limitations:** overnight ranges are not supported; slot start times are on a fixed grid (a booking can't start at 10:10).
 
-
 ## Step 10 (part 2): Bookings table and GET /availability
+
 **Goal:** Serve bookable slots with prices per court, using the availability engine.
 
 **Table:** bookings (club_id, location, court, user, date, start/end minute, duration, price snapshot, pricing model, plan snapshot, status, cancelled_at). Partial index on (court_id, date) for CONFIRMED rows; CHECK constraints on range, duration and price.
@@ -252,6 +252,7 @@ A slot is bookable only if the whole range lies inside one free window.
 **Flow:** load club, location (with hours), courts (with hours), unavailable periods and confirmed bookings of the date, then run the engine per court. About 7 queries per request regardless of the number of slots.
 
 **Rules:**
+
 - Date and "now" use the club's timezone; today shows only slots from the current minute; max 60 days ahead; past dates are rejected (400)
 - Duration must be offered by the location; courts that do not offer it are omitted; inactive courts omitted; inactive location is a 404 for consumers
 - A closed day returns empty slots and a notice (not an error)
@@ -265,3 +266,35 @@ A slot is bookable only if the whole range lies inside one free window.
 **Tests:** date helpers and booking-window unit tests (about 10 more).
 
 **Known limitations:** slot start times follow a fixed grid; the 60-day window is a constant; the availability response is computed on every request (no caching).
+
+## Step 11: Bookings and double-booking protection
+
+**Goal:** Let consumers book courts safely, and make overlapping bookings impossible.
+
+**Endpoints:** POST /bookings, GET /bookings, GET /bookings/:id, PATCH /bookings/:id/cancel
+
+**Booking flow (POST /bookings):**
+
+1. Tenant-checked court and location (inactive = not found); duration offered by the court; end by 24:00; start on the slot grid; date rules (club timezone, not in the past, max 60 days)
+2. Price calculated on the server (shift proration or membership); optional `expectedPrice` returns 409 if the price changed
+3. Transaction: lock the court row (SELECT ... FOR UPDATE), read unavailable periods and existing bookings under the lock, run `findBlockingReason` (the same engine as GET /availability), insert
+
+**Preventing double bookings (3 layers):**
+
+1. Validation with the shared availability engine
+2. Pessimistic row lock per court inside a transaction (bookings for one court are serialized; the second request gets a clear 409)
+3. PostgreSQL exclusion constraint `EXCL_bookings_no_overlap` (btree_gist: same court + same date + overlapping minute range, only for CONFIRMED rows); a violation (23P01) is mapped to 409
+   Verified with a script that fires 10-20 identical requests at once: exactly one succeeds.
+
+**Error codes:** 400 invalid input, 404 not found (also other clubs), 409 slot taken or price changed, 422 closed/unavailable/no price or membership.
+
+**Other rules:**
+
+- Bookings store a price snapshot (price, pricing model, plan name); cancelled, never deleted; only CONFIRMED rows block a court
+- Cancel is allowed until the start time (atomic UPDATE ... WHERE status = CONFIRMED); admins can cancel any booking of their club
+- Consumers see only their own bookings; admins see the whole club's, with user details; filters: status, period (upcoming = not ended), location, court, date range; history keeps names of deleted courts and locations
+- A court or location with upcoming bookings cannot be deleted (409); an unavailable period cannot be added over confirmed bookings (409)
+
+**Tenant isolation:** every booking query filters by club_id; consumers additionally by user_id.
+
+**Known limitations:** opening hours are read just before the lock (admin config edited in that instant is not seen); changing opening hours, court hours or durations does not re-check existing bookings; a consumer can hold overlapping bookings on different courts; no payment step; no cancellation deadline or refund rules; the constraint is created at startup (it moves into a migration in the wrap-up).
