@@ -223,7 +223,7 @@ package.
   cannot be used for bookings.
 - Package terms become immutable after assignment. Admins deactivate the old
   option and create a replacement so existing assignments retain their terms.
-- Consumer accounts register under a club slug. Club Admin assignment/search
+- Consumer accounts register under a Club ID. Club Admin assignment/search
   is limited to consumer accounts in that club context.
 - The assignment list places active packages with the soonest expiry first;
   the Admin UI highlights the five-day renewal window.

@@ -124,7 +124,7 @@ export function SettingsPage() {
                 label="Club"
                 value={user.club?.name ?? "Club details unavailable"}
               />
-              <Detail label="Club slug" value={user.club?.slug ?? "—"} />
+              <Detail label="Club ID" value={user.club?.slug ?? "—"} />
               <Detail
                 label="Pricing model"
                 value={user.club ? pricingModel : "—"}

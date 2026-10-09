@@ -50,6 +50,12 @@ type Availability = {
   courts: CourtSlots[];
 };
 type ApiError = { message?: string | string[] };
+type MyMembership = {
+  status: string;
+  package: { bookingDurationMinutes: number } | null;
+  bookingsRemaining: number | null;
+};
+type MyMembershipsResponse = { current: MyMembership | null };
 type SelectedSlot = { courtId: string; courtName: string; slot: Slot };
 type BookingReceipt = {
   id: string;
@@ -119,6 +125,11 @@ export function AvailabilityView({
   const [dates, setDates] = useState<string[]>([]);
   const [date, setDate] = useState("");
   const [duration, setDuration] = useState(location.durations[0]);
+  const [membershipDuration, setMembershipDuration] = useState<number | null>(
+    null,
+  );
+  const [membershipLoaded, setMembershipLoaded] = useState(false);
+  const [membershipError, setMembershipError] = useState("");
   const [availability, setAvailability] = useState<Availability | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -129,6 +140,65 @@ export function AvailabilityView({
   );
   const [bookingError, setBookingError] = useState("");
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
+  const effectiveDuration = membershipDuration ?? duration;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const token = useAuthStore.getState().accessToken;
+    if (!token) {
+      setMembershipLoaded(true);
+      return () => controller.abort();
+    }
+
+    async function loadCurrentMembership() {
+      try {
+        const response = await fetch(`${apiBaseUrl}/me/membership`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        const result = (await response
+          .json()
+          .catch(() => ({}))) as MyMembershipsResponse & ApiError;
+        if (!response.ok) {
+          const message = Array.isArray(result.message)
+            ? result.message.join(" ")
+            : result.message;
+          throw new Error(message || "We couldn’t load your membership.");
+        }
+
+        const current = result.current;
+        if (
+          current?.status === "ACTIVE" &&
+          typeof current.bookingsRemaining === "number" &&
+          current.bookingsRemaining > 0 &&
+          current.package
+        ) {
+          const packageDuration = current.package.bookingDurationMinutes;
+          if (!location.durations.includes(packageDuration)) {
+            setMembershipError(
+              `Your active membership includes ${durationLabel(packageDuration)} bookings, but this location doesn’t offer that duration. Please choose another location.`,
+            );
+          } else {
+            setMembershipDuration(packageDuration);
+            setDuration(packageDuration);
+          }
+        }
+      } catch (caught) {
+        if (caught instanceof DOMException && caught.name === "AbortError")
+          return;
+        setMembershipError(
+          caught instanceof Error
+            ? caught.message
+            : "We couldn’t load your membership.",
+        );
+      } finally {
+        if (!controller.signal.aborted) setMembershipLoaded(true);
+      }
+    }
+
+    void loadCurrentMembership();
+    return () => controller.abort();
+  }, [location.durations]);
 
   useEffect(() => {
     const nextDates = upcomingDates(timeZone);
@@ -138,6 +208,12 @@ export function AvailabilityView({
 
   const loadAvailability = useCallback(
     async (signal: AbortSignal) => {
+      if (!membershipLoaded) return undefined;
+      if (membershipError) {
+        setError(membershipError);
+        setLoading(false);
+        return undefined;
+      }
       const token = useAuthStore.getState().accessToken;
       if (!token) {
         setError("Your session has ended. Please sign in again.");
@@ -149,7 +225,7 @@ export function AvailabilityView({
       const query = new URLSearchParams({
         locationId: location.id,
         date,
-        durationMinutes: String(duration),
+        durationMinutes: String(effectiveDuration),
       });
       try {
         const response = await fetch(`${apiBaseUrl}/availability?${query}`, {
@@ -180,7 +256,7 @@ export function AvailabilityView({
         if (!signal.aborted) setLoading(false);
       }
     },
-    [date, duration, location.id],
+    [date, effectiveDuration, location.id, membershipError, membershipLoaded],
   );
 
   function chooseSlot(courtId: string, courtName: string, slot: Slot) {
@@ -211,7 +287,7 @@ export function AvailabilityView({
           courtId: selectedSlot.courtId,
           date,
           startTime: selectedSlot.slot.startTime,
-          durationMinutes: duration,
+          durationMinutes: effectiveDuration,
           expectedPrice: selectedSlot.slot.price,
         }),
       });
@@ -329,21 +405,32 @@ export function AvailabilityView({
               <CalendarDays size={17} className="text-[#568167]" />
               Select a day
             </div>
-            <label className="flex items-center gap-2 text-sm text-[#66746a]">
-              <Clock3 size={16} />
-              <span className="sr-only">Session duration</span>
-              <select
-                value={duration}
-                onChange={(event) => setDuration(Number(event.target.value))}
-                className="h-10 rounded-lg border border-[#dfe6df] bg-white px-3 text-sm text-[#344239] outline-none focus:border-[#6e9b78]"
-              >
-                {location.durations.map((minutes) => (
-                  <option key={minutes} value={minutes}>
-                    {durationLabel(minutes)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {!membershipLoaded ? (
+              <p className="flex items-center gap-2 text-sm text-[#66746a]">
+                <Clock3 size={16} /> Checking membership…
+              </p>
+            ) : membershipDuration !== null ? (
+              <p className="flex items-center gap-2 rounded-lg bg-[#edf5ed] px-3 py-2 text-sm font-medium text-[#34704a]">
+                <BadgeCheck size={16} /> Membership booking ·{" "}
+                {durationLabel(membershipDuration)}
+              </p>
+            ) : (
+              <label className="flex items-center gap-2 text-sm text-[#66746a]">
+                <Clock3 size={16} />
+                <span className="sr-only">Session duration</span>
+                <select
+                  value={duration}
+                  onChange={(event) => setDuration(Number(event.target.value))}
+                  className="h-10 rounded-lg border border-[#dfe6df] bg-white px-3 text-sm text-[#344239] outline-none focus:border-[#6e9b78]"
+                >
+                  {location.durations.map((minutes) => (
+                    <option key={minutes} value={minutes}>
+                      {durationLabel(minutes)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
             {dates.map((day) => {
@@ -373,7 +460,7 @@ export function AvailabilityView({
               Available courts
             </h2>
             <p className="mt-1 text-sm text-[#7b877e]">
-              {selectedDateLabel} · {durationLabel(duration)} sessions · club
+              {selectedDateLabel} · {durationLabel(effectiveDuration)} sessions · club
               time
             </p>
           </div>
@@ -426,7 +513,9 @@ export function AvailabilityView({
                   No courts offer this session length
                 </h3>
                 <p className="mt-2 text-sm text-[#738077]">
-                  Choose another duration to check available courts.
+                  {membershipDuration !== null
+                    ? "Try another day or location for a court that supports your membership duration."
+                    : "Choose another duration to check available courts."}
                 </p>
               </div>
             )}
@@ -442,7 +531,7 @@ export function AvailabilityView({
                         {court.courtName}
                       </h3>
                       <p className="mt-1 text-xs text-[#829087]">
-                        {durationLabel(duration)} court session
+                        {durationLabel(effectiveDuration)} court session
                       </p>
                     </div>
                     <span className="rounded-lg bg-[#edf5ed] px-2.5 py-1.5 text-[11px] font-semibold text-[#34704a]">
@@ -588,7 +677,7 @@ export function AvailabilityView({
                     – {selectedSlot.slot.endTime}
                   </p>
                   <p className="mt-1 text-sm text-[#6f7d73]">
-                    {durationLabel(duration)} session
+                    {durationLabel(effectiveDuration)} session
                   </p>
                   <div className="mt-4 flex justify-between border-t border-[#e5ebe5] pt-3 text-sm">
                     <span className="font-semibold text-[#344239]">

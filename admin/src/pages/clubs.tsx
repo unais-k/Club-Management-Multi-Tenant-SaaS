@@ -1100,7 +1100,7 @@ export function ClubsPage() {
                 />
               </Field>
               <Field
-                label="Club slug"
+                label="Club ID"
                 hint="Lowercase letters, numbers, and single hyphens."
               >
                 <input
@@ -1268,7 +1268,7 @@ export function ClubsPage() {
               />
             </Field>
             <p className="text-[11px] leading-5 text-muted-foreground">
-              Slug and pricing model are fixed when a club is created.
+              Club ID and pricing model are fixed when a club is created.
             </p>
             <footer className="flex justify-end gap-2 border-t border-border pt-4">
               <Button
@@ -1312,12 +1312,12 @@ export function ClubsPage() {
             </div>
             <dl className="grid grid-cols-2 gap-x-5 gap-y-5">
               {[
-                ["Slug", dialog.tenant.slug],
+                ["Club ID", dialog.tenant.slug],
                 ["Pricing model", pricingLabel(dialog.tenant.pricingModel)],
                 ["Timezone", dialog.tenant.timezone],
                 ["Created", formatDate(dialog.tenant.createdAt)],
                 ["Last updated", formatDate(dialog.tenant.updatedAt)],
-                ["Club ID", dialog.tenant.id],
+                // ["Club ID", dialog.tenant.id],
               ].map(([label, value]) => (
                 <div key={label} className="min-w-0">
                   <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">

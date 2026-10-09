@@ -8,9 +8,11 @@ import {
 import {
   BadgeCheck,
   Clock3,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
+  Trash2,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,7 @@ type PackageOption = {
   pricePerBooking: number;
   packageFee: number;
   isActive: boolean;
+  assignmentCount?: number;
 };
 type Location = { id: string; durations: number[] };
 type Consumer = { id: string; name: string; email: string };
@@ -107,6 +110,7 @@ export function MembershipsPage() {
   const [packageFormPlanId, setPackageFormPlanId] = useState<string | null>(
     null,
   );
+  const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
   const [packageDraft, setPackageDraft] = useState(emptyPackage);
   const [assignmentSearch, setAssignmentSearch] = useState("");
   const [assignOpen, setAssignOpen] = useState(false);
@@ -292,28 +296,43 @@ export function MembershipsPage() {
     }
   }
 
-  async function createPackage(event: FormEvent, planId: string) {
+  async function savePackage(event: FormEvent, planId: string) {
     event.preventDefault();
     setBusy(true);
     setError("");
     setNotice("");
+    const payload = {
+      validityDays: Number(packageDraft.validityDays),
+      bookingDurationMinutes: Number(packageDraft.bookingDurationMinutes),
+      includedBookings: Number(packageDraft.includedBookings),
+      pricePerBooking: Number(packageDraft.pricePerBooking),
+    };
     try {
-      await apiRequest(`/memberships/${planId}/packages`, {
-        method: "POST",
-        body: JSON.stringify({
-          validityDays: Number(packageDraft.validityDays),
-          bookingDurationMinutes: Number(packageDraft.bookingDurationMinutes),
-          includedBookings: Number(packageDraft.includedBookings),
-          pricePerBooking: Number(packageDraft.pricePerBooking),
-        }),
-      });
+      await apiRequest(
+        editingPackageId
+          ? `/memberships/packages/${editingPackageId}`
+          : `/memberships/${planId}/packages`,
+        {
+          method: editingPackageId ? "PUT" : "POST",
+          body: JSON.stringify(payload),
+        },
+      );
       setPackageFormPlanId(null);
+      setEditingPackageId(null);
       setPackageDraft(emptyPackage);
-      setNotice("Package option created.");
+      setNotice(
+        editingPackageId
+          ? "Package option updated."
+          : "Package option created.",
+      );
       await load();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Could not create package option",
+        err instanceof Error
+          ? err.message
+          : editingPackageId
+            ? "Could not update package option"
+            : "Could not create package option",
       );
     } finally {
       setBusy(false);
@@ -336,6 +355,32 @@ export function MembershipsPage() {
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not update package option",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deletePackage(option: PackageOption) {
+    if ((option.assignmentCount ?? 0) > 0) return;
+    if (
+      !window.confirm(
+        "Delete this unused package option? This cannot be undone.",
+      )
+    )
+      return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest(`/memberships/packages/${option.id}`, {
+        method: "DELETE",
+      });
+      await load();
+      setNotice("Package option deleted.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not delete package option",
       );
     } finally {
       setBusy(false);
@@ -540,6 +585,7 @@ export function MembershipsPage() {
                     variant="outline"
                     disabled={!plan.isActive || durations.length === 0}
                     onClick={() => {
+                      setEditingPackageId(null);
                       setPackageDraft({
                         ...emptyPackage,
                         bookingDurationMinutes: String(durations[0] ?? 30),
@@ -558,40 +604,92 @@ export function MembershipsPage() {
                     assignable.
                   </p>
                 ) : (
-                  (packages[plan.id] ?? []).map((option) => (
-                    <div
-                      key={option.id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold">
-                          {option.validityDays} days ·{" "}
-                          {option.bookingDurationMinutes} min ·{" "}
-                          {option.includedBookings} bookings
-                        </p>
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          {money(option.pricePerBooking)} per booking · package
-                          fee{" "}
-                          <strong className="text-foreground">
-                            {money(option.packageFee)}
-                          </strong>
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant={option.isActive ? "outline" : "secondary"}
-                        disabled={busy}
-                        onClick={() => void togglePackage(option)}
+                  (packages[plan.id] ?? []).map((option) => {
+                    const assignmentCount = option.assignmentCount ?? 0;
+                    return (
+                      <div
+                        key={option.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-3"
                       >
-                        {option.isActive ? "Deactivate" : "Activate"}
-                      </Button>
-                    </div>
-                  ))
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold">
+                            {option.validityDays} days ·{" "}
+                            {option.bookingDurationMinutes} min ·{" "}
+                            {option.includedBookings} bookings
+                          </p>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {money(option.pricePerBooking)} per booking · package
+                            fee{" "}
+                            <strong className="text-foreground">
+                              {money(option.packageFee)}
+                            </strong>
+                            {assignmentCount > 0 && (
+                              <span>
+                                {" "}· Assigned {assignmentCount} time
+                                {assignmentCount === 1 ? "" : "s"}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy || assignmentCount > 0}
+                            title={
+                              assignmentCount > 0
+                                ? "Assigned package terms are locked to preserve member history."
+                                : "Edit package option"
+                            }
+                            onClick={() => {
+                              setPackageDraft({
+                                validityDays: String(option.validityDays),
+                                bookingDurationMinutes: String(
+                                  option.bookingDurationMinutes,
+                                ),
+                                includedBookings: String(
+                                  option.includedBookings,
+                                ),
+                                pricePerBooking: String(
+                                  option.pricePerBooking,
+                                ),
+                              });
+                              setEditingPackageId(option.id);
+                              setPackageFormPlanId(plan.id);
+                            }}
+                          >
+                            <Pencil className="mr-1 size-3.5" /> Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={option.isActive ? "outline" : "secondary"}
+                            disabled={busy}
+                            onClick={() => void togglePackage(option)}
+                          >
+                            {option.isActive ? "Deactivate" : "Activate"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={busy || assignmentCount > 0}
+                            title={
+                              assignmentCount > 0
+                                ? "Assigned packages cannot be deleted; deactivate instead."
+                                : "Delete unused package option"
+                            }
+                            onClick={() => void deletePackage(option)}
+                          >
+                            <Trash2 className="mr-1 size-3.5" /> Delete
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
               {packageFormPlanId === plan.id && (
                 <form
-                  onSubmit={(event) => void createPackage(event, plan.id)}
+                  onSubmit={(event) => void savePackage(event, plan.id)}
                   className="grid gap-3 rounded-xl border border-primary/20 bg-muted/20 p-4 sm:grid-cols-2"
                 >
                   <Field label="Validity (days)">
@@ -677,12 +775,20 @@ export function MembershipsPage() {
                     <Button
                       type="button"
                       variant="ghost"
-                      onClick={() => setPackageFormPlanId(null)}
+                      onClick={() => {
+                        setPackageFormPlanId(null);
+                        setEditingPackageId(null);
+                        setPackageDraft(emptyPackage);
+                      }}
                     >
                       Cancel
                     </Button>
                     <Button disabled={busy || !durations.length}>
-                      {busy ? "Saving…" : "Create package"}
+                      {busy
+                        ? "Saving…"
+                        : editingPackageId
+                          ? "Save package"
+                          : "Create package"}
                     </Button>
                   </div>
                 </form>
@@ -905,7 +1011,7 @@ export function MembershipsPage() {
                       {item.payment.paidAt
                         ? dateLabel(item.payment.paidAt)
                         : ""}{" "}
-                      · {money(item.payment.amount)} (no money collected)
+                      · {money(item.payment.amount)}
                     </p>
                   )}
                 </article>

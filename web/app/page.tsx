@@ -274,7 +274,7 @@ export default function Home() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-[#344239]">
-                Club slug
+                Club ID
               </span>
               <span className="relative block">
                 <MapPin
@@ -291,7 +291,7 @@ export default function Home() {
                 />
               </span>
               <span className="block text-xs text-[#849087]">
-                Ask your club for its sign-in slug.
+                Ask your club for its sign-in club-id.
               </span>
             </label>
             {mode === "register" && (

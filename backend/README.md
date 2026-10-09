@@ -33,7 +33,7 @@ fresh database receives the schema in order.
 | `npm run migration:show` | Show migration status |
 | `npm run migration:generate -- src/database/migrations/Name` | Generate a migration from entity changes |
 | `npm run migration:revert` | Revert the most recently applied migration |
-| `npm run seed` | Add demo data; existing demo club slugs are skipped |
+| `npm run seed` | Add demo data; existing demo Club IDs are skipped |
 | `npm run seed:reset` | Clear app tables and load the demo data again |
 
 `seed:reset` is intended for development data. It clears existing application

@@ -315,10 +315,6 @@ export default function MembershipsPage() {
             </Button>
           </div>
 
-          <div className="mt-6 rounded-xl border border-[#e9e4ce] bg-[#fffcef] px-4 py-3 text-xs leading-5 text-[#726b48]">
-            Demo checkout only. It records a simulated payment and receipt; no
-            payment provider is connected and no money is collected.
-          </div>
           {notice && (
             <p
               role="status"

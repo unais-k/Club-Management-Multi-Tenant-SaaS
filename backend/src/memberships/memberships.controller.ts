@@ -171,6 +171,23 @@ export class MembershipsController {
     return this.membershipsService.updatePackage(clubId, packageId, dto);
   }
 
+  @Delete('packages/:packageId')
+  @HttpCode(204)
+  @ApiOperation({
+    summary: 'Delete an unused membership package option',
+    description:
+      'A package that has ever been assigned to a consumer cannot be deleted. Deactivate it instead to retain membership history and prevent new assignments.',
+  })
+  @ApiConflictResponse({
+    description: 'Package has one or more consumer assignments; deactivate it instead.',
+  })
+  removePackage(
+    @ClubId() clubId: string,
+    @Param('packageId', ParseUUIDPipe) packageId: string,
+  ) {
+    return this.membershipsService.removePackage(clubId, packageId);
+  }
+
   @Post(':id/assignments')
   @ApiOperation({
     summary: 'Assign a package to a consumer',

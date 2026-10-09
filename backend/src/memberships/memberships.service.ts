@@ -16,7 +16,10 @@ import {
   Repository,
 } from 'typeorm';
 import { BookingStatus, PricingModel, UserRole } from '../common/enums/index.js';
-import { isUniqueViolation } from '../common/helpers/db-errors.js';
+import {
+  isForeignKeyViolation,
+  isUniqueViolation,
+} from '../common/helpers/db-errors.js';
 import { Booking } from '../bookings/entities/booking.entity.js';
 import { Location } from '../locations/entities/location.entity.js';
 import { Tenant } from '../tenants/entities/tenant.entity.js';
@@ -198,9 +201,25 @@ export class MembershipsService {
       where: { clubId, membershipId },
       order: { validityDays: 'ASC', bookingDurationMinutes: 'ASC' },
     });
-    return packages.map((membershipPackage) =>
-      this.toPackageResponse(membershipPackage),
+    const assignmentCounts = packages.length
+      ? await this.userMembershipRepo
+          .createQueryBuilder('assignment')
+          .select('assignment.packageId', 'packageId')
+          .addSelect('COUNT(*)', 'count')
+          .where('assignment.clubId = :clubId', { clubId })
+          .andWhere('assignment.packageId IN (:...packageIds)', {
+            packageIds: packages.map((membershipPackage) => membershipPackage.id),
+          })
+          .groupBy('assignment.packageId')
+          .getRawMany<{ packageId: string; count: string }>()
+      : [];
+    const countByPackageId = new Map(
+      assignmentCounts.map((row) => [row.packageId, Number(row.count)]),
     );
+    return packages.map((membershipPackage) => ({
+      ...this.toPackageResponse(membershipPackage),
+      assignmentCount: countByPackageId.get(membershipPackage.id) ?? 0,
+    }));
   }
 
   async listPackageQuotes(
@@ -305,6 +324,29 @@ export class MembershipsService {
       if (isUniqueViolation(err)) {
         throw new ConflictException(
           'An active package already exists for this validity and booking duration.',
+        );
+      }
+      throw err;
+    }
+  }
+
+  async removePackage(clubId: string, id: string) {
+    const membershipPackage = await this.getOwnedPackage(clubId, id);
+    const assignments = await this.userMembershipRepo.count({
+      where: { clubId, packageId: id },
+    });
+    if (assignments > 0) {
+      throw new ConflictException(
+        'This package has been assigned to a consumer and cannot be deleted. Deactivate it to stop new assignments while preserving membership history.',
+      );
+    }
+
+    try {
+      await this.packageRepo.remove(membershipPackage);
+    } catch (err) {
+      if (isForeignKeyViolation(err)) {
+        throw new ConflictException(
+          'This package has been assigned to a consumer and cannot be deleted. Deactivate it instead.',
         );
       }
       throw err;

@@ -15,3 +15,11 @@ export function isExclusionViolation(err: unknown): boolean {
     (err.driverError as { code?: string })?.code === '23P01'
   );
 }
+
+// PostgreSQL error code 23503 = foreign key constraint violated
+export function isForeignKeyViolation(err: unknown): boolean {
+  return (
+    err instanceof QueryFailedError &&
+    (err.driverError as { code?: string })?.code === '23503'
+  );
+}

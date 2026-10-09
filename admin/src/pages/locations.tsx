@@ -362,7 +362,7 @@ export function LocationsPage() {
         </Empty>
       ) : (
         <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-          <PageCard className="h-fit p-3">
+          <PageCard className="h-fit p-3 xl:sticky xl:top-24">
             <div className="mb-2 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               Your locations
             </div>

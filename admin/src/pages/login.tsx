@@ -153,7 +153,7 @@ export function LoginPage() {
           <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
             {mode === "club" && (
               <label className="block space-y-2">
-                <span className="text-xs font-medium">Club slug</span>
+                <span className="text-xs font-medium">Club ID</span>
                 <input
                   autoComplete="organization"
                   required

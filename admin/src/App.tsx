@@ -283,9 +283,7 @@ function App() {
 
         <main className="mx-auto max-w-360 p-4 sm:p-8">
           <div className="mb-6">
-            <p className="text-xs text-muted-foreground">
-              Workspace / {page.title}
-            </p>
+            <p className="text-xs text-muted-foreground">🏢 / {page.title}</p>
           </div>
           <Routes>
             <Route path="/overview" element={<OverviewPage />} />
