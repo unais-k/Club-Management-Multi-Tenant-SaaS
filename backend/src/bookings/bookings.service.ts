@@ -150,6 +150,7 @@ export class BookingsService {
                     if (
                         !assignment ||
                         assignment.cancelledAt ||
+                        !assignment.paidAt ||
                         assignment.startsAt > now ||
                         assignment.expiresAt <= now ||
                         !membershipPackage ||

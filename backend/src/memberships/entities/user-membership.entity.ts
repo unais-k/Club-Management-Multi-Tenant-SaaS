@@ -6,6 +6,7 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToOne,
   PrimaryGeneratedColumn,
   type Relation,
 } from 'typeorm';
@@ -13,6 +14,7 @@ import { User } from '../../users/entities/user.entity.js';
 import { Membership } from './membership.entity.js';
 import { MembershipPackage } from './membership-package.entity.js';
 import { decimalTransformer } from '../../common/helpers/decimal.transformer.js';
+import { MembershipPayment } from './membership-payment.entity.js';
 
 // One row = one subscription of a consumer to a plan
 @Entity('user_memberships')
@@ -52,6 +54,9 @@ export class UserMembership {
   @JoinColumn({ name: 'packageId' })
   package: Relation<MembershipPackage> | null;
 
+  @OneToOne(() => MembershipPayment, (payment) => payment.userMembership)
+  payment: Relation<MembershipPayment> | null;
+
   // Snapshot the package charge when this assignment is created.
   @Column({
     type: 'numeric',
@@ -61,6 +66,10 @@ export class UserMembership {
     transformer: decimalTransformer,
   })
   packageFee: number | null;
+
+  // Set only after the demo checkout is confirmed; booking access requires this.
+  @Column({ type: 'timestamptz', nullable: true })
+  paidAt: Date | null;
 
   @Column({ type: 'timestamptz' })
   startsAt: Date;

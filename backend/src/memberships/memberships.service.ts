@@ -12,6 +12,7 @@ import {
   IsNull,
   LessThanOrEqual,
   MoreThan,
+  Not,
   Repository,
 } from 'typeorm';
 import { BookingStatus, PricingModel, UserRole } from '../common/enums/index.js';
@@ -29,6 +30,10 @@ import { SetMembershipPricesDto } from './dto/set-membership-prices.dto.js';
 import { UpdateMembershipDto } from './dto/update-membership.dto.js';
 import { MembershipPrice } from './entities/membership-price.entity.js';
 import { MembershipPackage } from './entities/membership-package.entity.js';
+import {
+  MembershipPayment,
+  type MembershipPaymentStatus,
+} from './entities/membership-payment.entity.js';
 import { Membership } from './entities/membership.entity.js';
 import { UserMembership } from './entities/user-membership.entity.js';
 
@@ -37,6 +42,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export type MembershipStatus =
   | 'ACTIVE'
   | 'SCHEDULED'
+  | 'PENDING_PAYMENT'
   | 'EXHAUSTED'
   | 'EXPIRED'
   | 'CANCELLED';
@@ -372,12 +378,17 @@ export class MembershipsService {
           clubId,
           userId: consumer.id,
           cancelledAt: IsNull(),
-          expiresAt: MoreThan(now),
         },
         order: { startsAt: 'ASC' },
       });
-      const currentRows = existing.filter((row) => row.startsAt <= now);
-      const scheduled = existing.filter((row) => row.startsAt > now);
+      if (existing.some((row) => !row.paidAt)) {
+        throw new ConflictException(
+          'This consumer already has a membership package waiting for payment.',
+        );
+      }
+      const inDateRange = existing.filter((row) => row.expiresAt > now);
+      const currentRows = inDateRange.filter((row) => row.startsAt <= now);
+      const scheduled = inDateRange.filter((row) => row.startsAt > now);
 
       const current: UserMembership[] = [];
       for (const row of currentRows) {
@@ -424,7 +435,7 @@ export class MembershipsService {
       const expiresAt = new Date(
         startsAt.getTime() + membershipPackage.validityDays * DAY_MS,
       );
-      return manager.save(
+      const savedAssignment = await manager.save(
         manager.create(UserMembership, {
           clubId,
           userId: consumer.id,
@@ -433,11 +444,99 @@ export class MembershipsService {
           packageFee,
           startsAt,
           expiresAt,
+          paidAt: null,
         }),
       );
+      const payment = await manager.save(
+        manager.create(MembershipPayment, {
+          clubId,
+          userId: consumer.id,
+          userMembershipId: savedAssignment.id,
+          amount: packageFee,
+          status: 'PENDING',
+          method: null,
+          paidAt: null,
+        }),
+      );
+      return { assignment: savedAssignment, payment };
     });
 
-    return this.toUserMembershipResponse(assignment, plan, now, membershipPackage);
+    return this.toUserMembershipResponse(
+      assignment.assignment,
+      plan,
+      now,
+      membershipPackage,
+      0,
+      assignment.payment,
+    );
+  }
+
+  async confirmDemoPayment(clubId: string, userId: string, assignmentId: string) {
+    const { assignment, payment } = await this.dataSource.transaction(
+      async (manager) => {
+        const assignment = await manager.findOne(UserMembership, {
+          where: { id: assignmentId, clubId, userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!assignment) {
+          throw new NotFoundException('Membership assignment not found');
+        }
+        if (assignment.cancelledAt) {
+          throw new ConflictException('This membership assignment was cancelled');
+        }
+
+        const payment = await manager.findOne(MembershipPayment, {
+          where: { userMembershipId: assignment.id, clubId, userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!payment) throw new NotFoundException('Membership payment not found');
+        if (payment.status === 'SIMULATED_PAID') return { assignment, payment };
+
+        const membershipPackage = assignment.packageId
+          ? await manager.findOne(MembershipPackage, {
+              where: { id: assignment.packageId, clubId },
+            })
+          : null;
+        if (!membershipPackage) {
+          throw new ConflictException('The assigned membership package is unavailable');
+        }
+
+        const now = new Date();
+        if (assignment.startsAt <= now) {
+          assignment.startsAt = now;
+          assignment.expiresAt = new Date(
+            now.getTime() + membershipPackage.validityDays * DAY_MS,
+          );
+        }
+        assignment.paidAt = now;
+        payment.status = 'SIMULATED_PAID';
+        payment.method = 'DEMO';
+        payment.paidAt = now;
+
+        await manager.save(MembershipPayment, payment);
+        await manager.save(UserMembership, assignment);
+        return { assignment, payment };
+      },
+    );
+
+    const loaded = await this.userMembershipRepo.findOne({
+      where: { id: assignment.id, clubId, userId },
+      relations: { membership: { prices: true }, package: true, payment: true },
+      withDeleted: true,
+    });
+    if (!loaded) throw new NotFoundException('Membership assignment not found');
+    const usage = await this.getConfirmedBookingCounts([loaded.id]);
+    return {
+      membership: this.toUserMembershipResponse(
+        loaded,
+        loaded.membership,
+        new Date(),
+        loaded.package,
+        usage.get(loaded.id) ?? 0,
+        payment,
+      ),
+      receipt: this.toPaymentResponse(payment),
+    };
   }
 
   async listAssignments(clubId: string, search?: string) {
@@ -446,6 +545,7 @@ export class MembershipsService {
       .leftJoinAndSelect('assignment.user', 'consumer')
       .leftJoinAndSelect('assignment.membership', 'membership')
       .leftJoinAndSelect('assignment.package', 'membershipPackage')
+      .leftJoinAndSelect('assignment.payment', 'payment')
       .where('assignment.clubId = :clubId', { clubId });
 
     const term = search?.trim();
@@ -466,10 +566,17 @@ export class MembershipsService {
         now,
         row.package,
         usage.get(row.id) ?? 0,
+        row.payment,
       ),
     );
     const rank = (status: MembershipStatus) =>
-      status === 'ACTIVE' ? 0 : status === 'SCHEDULED' ? 1 : 2;
+      status === 'ACTIVE'
+        ? 0
+        : status === 'PENDING_PAYMENT'
+          ? 1
+          : status === 'SCHEDULED'
+            ? 2
+            : 3;
     responses.sort(
       (a, b) =>
         rank(a.status) - rank(b.status) ||
@@ -484,7 +591,7 @@ export class MembershipsService {
     const now = new Date();
     const rows = await this.userMembershipRepo.find({
       where: { clubId, userId },
-      relations: { membership: { prices: true }, package: true },
+      relations: { membership: { prices: true }, package: true, payment: true },
       withDeleted: true, // keep history of plans that were deleted later
       order: { expiresAt: 'DESC' },
     });
@@ -497,6 +604,7 @@ export class MembershipsService {
         now,
         r.package,
         usage.get(r.id) ?? 0,
+        r.payment,
       ),
     );
     const current = items.find((item) => item.status === 'ACTIVE') ?? null;
@@ -504,6 +612,7 @@ export class MembershipsService {
     return {
       current,
       scheduled: items.filter((item) => item.status === 'SCHEDULED'),
+      pendingPayment: items.filter((item) => item.status === 'PENDING_PAYMENT'),
       history: items
         .filter((item) =>
           item.status === 'EXPIRED' ||
@@ -577,6 +686,7 @@ export class MembershipsService {
         startsAt: LessThanOrEqual(now),
         cancelledAt: IsNull(),
         expiresAt: MoreThan(now),
+        paidAt: Not(IsNull()),
       },
       relations: { membership: { prices: true }, package: true },
       withDeleted: true,
@@ -752,6 +862,7 @@ export class MembershipsService {
     usedBookings = 0,
   ): MembershipStatus {
     if (um.cancelledAt) return 'CANCELLED';
+    if (!um.paidAt) return 'PENDING_PAYMENT';
     if (um.expiresAt <= now) return 'EXPIRED';
     if (um.startsAt > now) return 'SCHEDULED';
     if (um.package && usedBookings >= um.package.includedBookings) return 'EXHAUSTED';
@@ -783,6 +894,7 @@ export class MembershipsService {
     now: Date,
     membershipPackage: MembershipPackage | null = um.package,
     usedBookings = 0,
+    payment: MembershipPayment | null = um.payment,
   ) {
     const status = this.statusOf(um, now, usedBookings);
     return {
@@ -804,6 +916,7 @@ export class MembershipsService {
       bookingsRemaining: membershipPackage
         ? Math.max(membershipPackage.includedBookings - usedBookings, 0)
         : null,
+      payment: payment ? this.toPaymentResponse(payment) : null,
       consumer: um.user
         ? { id: um.user.id, name: um.user.name, email: um.user.email }
         : null,
@@ -816,6 +929,18 @@ export class MembershipsService {
             prices: this.sortedPrices(plan.prices),
           }
         : null,
+    };
+  }
+
+  private toPaymentResponse(payment: MembershipPayment) {
+    return {
+      id: payment.id,
+      receiptNumber: `MEM-${payment.id.toUpperCase()}`,
+      amount: payment.amount,
+      status: payment.status as MembershipPaymentStatus,
+      method: payment.method,
+      paidAt: payment.paidAt,
+      simulated: payment.status === 'SIMULATED_PAID',
     };
   }
 }

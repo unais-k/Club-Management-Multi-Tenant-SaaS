@@ -7,6 +7,7 @@ import { User } from '../users/entities/user.entity.js';
 import { MembershipPrice } from './entities/membership-price.entity.js';
 import { Membership } from './entities/membership.entity.js';
 import { MembershipPackage } from './entities/membership-package.entity.js';
+import { MembershipPayment } from './entities/membership-payment.entity.js';
 import { UserMembership } from './entities/user-membership.entity.js';
 import { MeMembershipController } from './me-membership.controller.js';
 import { MembershipsController } from './memberships.controller.js';
@@ -17,6 +18,7 @@ import { MembershipsService } from './memberships.service.js';
     TypeOrmModule.forFeature([
       Membership,
       MembershipPackage,
+      MembershipPayment,
       MembershipPrice,
       UserMembership,
       Booking,
