@@ -13,8 +13,12 @@ import {
     findBlockingReason,
     slotStep,
 } from '../availability/availability-engine.js';
-import { evaluateBookingDate, hasStarted } from '../availability/booking-window.js';
-import { BookingStatus, UserRole } from '../common/enums/index.js';
+import {
+    evaluateBookingDate,
+    hasStarted,
+    isCancellationWindowClosed,
+} from '../availability/booking-window.js';
+import { BookingStatus, PricingModel, UserRole } from '../common/enums/index.js';
 import { dayOfWeekOf, isRealDate, nowInTimezone } from '../common/helpers/date.js';
 import { isExclusionViolation } from '../common/helpers/db-errors.js';
 import { type MinuteRange, toHHmm, toMinutes } from '../common/helpers/time.js';
@@ -24,6 +28,8 @@ import { LocationUnavailablePeriod } from '../locations/entities/location-unavai
 import { Location } from '../locations/entities/location.entity.js';
 import { PricingService } from '../pricing/pricing.service.js';
 import { Tenant } from '../tenants/entities/tenant.entity.js';
+import { MembershipPackage } from '../memberships/entities/membership-package.entity.js';
+import { UserMembership } from '../memberships/entities/user-membership.entity.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { BookingPeriod, ListBookingsQueryDto } from './dto/list-bookings-query.dto.js';
 import { Booking } from './entities/booking.entity.js';
@@ -88,7 +94,6 @@ export class BookingsService {
         }
 
         // 3. Price, always calculated on the server
-        // 3. Price, always calculated on the server
         const pricer = await this.pricingService.createPricer(clubId, user, {
             model: tenant.pricingModel,
             locationId: location.id,
@@ -122,6 +127,52 @@ export class BookingsService {
                     lock: { mode: 'pessimistic_write' },
                 });
                 if (!locked || !locked.isActive) throw new NotFoundException('Court not found');
+
+                let userMembershipId: string | null = null;
+                if (tenant.pricingModel === PricingModel.MEMBERSHIP_BASED) {
+                    const assignmentId = pricer.userMembershipId;
+                    if (!assignmentId) {
+                        throw new ConflictException(
+                            'An active membership package with remaining booking credits is required.',
+                        );
+                    }
+
+                    const assignment = await manager.findOne(UserMembership, {
+                        where: { id: assignmentId, clubId, userId: user.id },
+                        lock: { mode: 'pessimistic_write' },
+                    });
+                    const membershipPackage = assignment?.packageId
+                        ? await manager.findOne(MembershipPackage, {
+                            where: { id: assignment.packageId, clubId },
+                        })
+                        : null;
+                    const now = new Date();
+                    if (
+                        !assignment ||
+                        assignment.cancelledAt ||
+                        assignment.startsAt > now ||
+                        assignment.expiresAt <= now ||
+                        !membershipPackage ||
+                        membershipPackage.bookingDurationMinutes !== dto.durationMinutes
+                    ) {
+                        throw new ConflictException(
+                            'Your membership package is no longer eligible for this booking. Refresh availability and try again.',
+                        );
+                    }
+
+                    const usedBookings = await manager.count(Booking, {
+                        where: {
+                            userMembershipId: assignment.id,
+                            status: BookingStatus.CONFIRMED,
+                        },
+                    });
+                    if (usedBookings >= membershipPackage.includedBookings) {
+                        throw new ConflictException(
+                            'Your membership package has no remaining booking credits.',
+                        );
+                    }
+                    userMembershipId = assignment.id;
+                }
 
                 // Read what can conflict only after the lock is held
                 const periods = await manager.findBy(LocationUnavailablePeriod, {
@@ -165,6 +216,7 @@ export class BookingsService {
                         durationMinutes: dto.durationMinutes,
                         price,
                         pricingModel: tenant.pricingModel,
+                        userMembershipId,
                         membershipId: pricer.membership?.id ?? null,
                         membershipName: pricer.membership?.name ?? null,
                         status: BookingStatus.CONFIRMED,
@@ -260,6 +312,17 @@ export class BookingsService {
         }
         if (hasStarted(booking.date, booking.startMinute, tenant.timezone)) {
             throw new ConflictException('A booking that has already started cannot be cancelled');
+        }
+        if (
+            isCancellationWindowClosed(
+                booking.date,
+                booking.startMinute,
+                tenant.timezone,
+            )
+        ) {
+            throw new ConflictException(
+                'Bookings cannot be cancelled within 30 minutes of their start time',
+            );
         }
 
         // Atomic: only one of two parallel cancels can change the row
@@ -369,7 +432,8 @@ export class BookingsService {
             }),
             canCancel:
                 b.status === BookingStatus.CONFIRMED &&
-                !hasStarted(b.date, b.startMinute, timeZone, now),
+                !hasStarted(b.date, b.startMinute, timeZone, now) &&
+                !isCancellationWindowClosed(b.date, b.startMinute, timeZone, now),
             cancelledAt: b.cancelledAt,
             createdAt: b.createdAt,
         };

@@ -3,25 +3,17 @@ import { PricingModel, UserRole } from '../common/enums/index.js';
 import { PricingService } from './pricing.service.js';
 
 describe('PricingService membership availability preview', () => {
-  it('returns prices for all active matching plans to a club admin without requiring membership', async () => {
-    const findAll = vi.fn().mockResolvedValue([
+  it('returns active package rates to a club admin without requiring membership', async () => {
+    const listPackageQuotes = vi.fn().mockResolvedValue([
       {
-        id: 'plan-active',
-        name: 'Gold',
-        isActive: true,
-        prices: [{ durationMinutes: 60, price: 25 }],
-      },
-      {
-        id: 'plan-inactive',
-        name: 'Old plan',
-        isActive: false,
-        prices: [{ durationMinutes: 60, price: 10 }],
-      },
-      {
-        id: 'plan-other-duration',
-        name: 'Short plan',
-        isActive: true,
-        prices: [{ durationMinutes: 30, price: 15 }],
+        packageId: 'package-1',
+        membershipId: 'plan-1',
+        membershipName: 'Gold',
+        validityDays: 30,
+        bookingDurationMinutes: 60,
+        includedBookings: 24,
+        price: 25,
+        packageFee: 600,
       },
     ]);
     const service = new PricingService(
@@ -31,7 +23,7 @@ describe('PricingService membership availability preview', () => {
       {} as never,
       {} as never,
       {} as never,
-      { findAll } as never,
+      { listPackageQuotes } as never,
     );
 
     const pricer = await service.createPricer(
@@ -45,12 +37,21 @@ describe('PricingService membership availability preview', () => {
       },
     );
 
-    expect(findAll).toHaveBeenCalledWith('club-1', UserRole.CLUB_ADMIN);
+    expect(listPackageQuotes).toHaveBeenCalledWith('club-1', 60, undefined);
     expect(pricer.note).toBeNull();
     expect(pricer.priceFor('court-1', 480)).toEqual({
       price: null,
       prices: [
-        { membershipId: 'plan-active', membershipName: 'Gold', price: 25 },
+        {
+          packageId: 'package-1',
+          membershipId: 'plan-1',
+          membershipName: 'Gold',
+          validityDays: 30,
+          bookingDurationMinutes: 60,
+          includedBookings: 24,
+          price: 25,
+          packageFee: 600,
+        },
       ],
     });
   });

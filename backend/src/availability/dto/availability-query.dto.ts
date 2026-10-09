@@ -20,9 +20,17 @@ export class AvailabilityQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Membership-based clubs only: preview the prices of this plan. Required for admins; consumers default to their own memberships.',
+      'Club Admins may filter available package options by plan. Consumers automatically use their assigned active package.',
   })
   @IsOptional()
   @IsUUID()
   membershipId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Club Admin only: select one package option when previewing its specific price.',
+  })
+  @IsOptional()
+  @IsUUID()
+  packageId?: string;
 }

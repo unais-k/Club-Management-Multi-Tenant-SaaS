@@ -14,8 +14,9 @@ import {
   MoreThan,
   Repository,
 } from 'typeorm';
-import { PricingModel, UserRole } from '../common/enums/index.js';
+import { BookingStatus, PricingModel, UserRole } from '../common/enums/index.js';
 import { isUniqueViolation } from '../common/helpers/db-errors.js';
+import { Booking } from '../bookings/entities/booking.entity.js';
 import { Location } from '../locations/entities/location.entity.js';
 import { Tenant } from '../tenants/entities/tenant.entity.js';
 import { User } from '../users/entities/user.entity.js';
@@ -33,7 +34,12 @@ import { UserMembership } from './entities/user-membership.entity.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export type MembershipStatus = 'ACTIVE' | 'SCHEDULED' | 'EXPIRED' | 'CANCELLED';
+export type MembershipStatus =
+  | 'ACTIVE'
+  | 'SCHEDULED'
+  | 'EXHAUSTED'
+  | 'EXPIRED'
+  | 'CANCELLED';
 
 @Injectable()
 export class MembershipsService {
@@ -46,6 +52,8 @@ export class MembershipsService {
     private readonly packageRepo: Repository<MembershipPackage>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(Booking)
+    private readonly bookingRepo: Repository<Booking>,
     @InjectRepository(Tenant)
     private readonly tenantRepo: Repository<Tenant>,
     @InjectRepository(Location)
@@ -187,6 +195,39 @@ export class MembershipsService {
     return packages.map((membershipPackage) =>
       this.toPackageResponse(membershipPackage),
     );
+  }
+
+  async listPackageQuotes(
+    clubId: string,
+    durationMinutes: number,
+    membershipId?: string,
+  ) {
+    const packages = await this.packageRepo.find({
+      where: {
+        clubId,
+        bookingDurationMinutes: durationMinutes,
+        isActive: true,
+        ...(membershipId ? { membershipId } : {}),
+      },
+      relations: { membership: true },
+      order: { validityDays: 'ASC', includedBookings: 'ASC' },
+    });
+
+    return packages
+      .filter((membershipPackage) => membershipPackage.membership?.isActive)
+      .map((membershipPackage) => ({
+        packageId: membershipPackage.id,
+        membershipId: membershipPackage.membershipId,
+        membershipName: membershipPackage.membership.name,
+        validityDays: membershipPackage.validityDays,
+        bookingDurationMinutes: membershipPackage.bookingDurationMinutes,
+        includedBookings: membershipPackage.includedBookings,
+        price: membershipPackage.pricePerBooking,
+        packageFee: this.packageFee(
+          membershipPackage.pricePerBooking,
+          membershipPackage.includedBookings,
+        ),
+      }));
   }
 
   async createPackage(
@@ -335,8 +376,27 @@ export class MembershipsService {
         },
         order: { startsAt: 'ASC' },
       });
-      const current = existing.filter((row) => row.startsAt <= now);
+      const currentRows = existing.filter((row) => row.startsAt <= now);
       const scheduled = existing.filter((row) => row.startsAt > now);
+
+      const current: UserMembership[] = [];
+      for (const row of currentRows) {
+        const packageOption = row.packageId
+          ? await manager.findOne(MembershipPackage, {
+              where: { id: row.packageId, clubId },
+            })
+          : null;
+        const usedBookings = await manager.count(Booking, {
+          where: {
+            userMembershipId: row.id,
+            status: BookingStatus.CONFIRMED,
+          },
+        });
+        const exhausted =
+          packageOption !== null &&
+          usedBookings >= packageOption.includedBookings;
+        if (!exhausted) current.push(row);
+      }
 
       if (current.length > 1) {
         throw new ConflictException(
@@ -398,8 +458,15 @@ export class MembershipsService {
 
     const rows = await query.getMany();
     const now = new Date();
+    const usage = await this.getConfirmedBookingCounts(rows.map((row) => row.id));
     const responses = rows.map((row) =>
-      this.toUserMembershipResponse(row, row.membership, now, row.package),
+      this.toUserMembershipResponse(
+        row,
+        row.membership,
+        now,
+        row.package,
+        usage.get(row.id) ?? 0,
+      ),
     );
     const rank = (status: MembershipStatus) =>
       status === 'ACTIVE' ? 0 : status === 'SCHEDULED' ? 1 : 2;
@@ -422,8 +489,15 @@ export class MembershipsService {
       order: { expiresAt: 'DESC' },
     });
 
+    const usage = await this.getConfirmedBookingCounts(rows.map((row) => row.id));
     const items = rows.map((r) =>
-      this.toUserMembershipResponse(r, r.membership, now, r.package),
+      this.toUserMembershipResponse(
+        r,
+        r.membership,
+        now,
+        r.package,
+        usage.get(r.id) ?? 0,
+      ),
     );
     const current = items.find((item) => item.status === 'ACTIVE') ?? null;
 
@@ -431,7 +505,11 @@ export class MembershipsService {
       current,
       scheduled: items.filter((item) => item.status === 'SCHEDULED'),
       history: items
-        .filter((item) => item.status === 'EXPIRED' || item.status === 'CANCELLED')
+        .filter((item) =>
+          item.status === 'EXPIRED' ||
+          item.status === 'CANCELLED' ||
+          item.status === 'EXHAUSTED',
+        )
         .slice(0, 20),
     };
   }
@@ -441,24 +519,48 @@ export class MembershipsService {
   async resolvePrice(
     clubId: string,
     durationMinutes: number,
-    opts: { role: UserRole; userId?: string; membershipId?: string },
+    opts: {
+      role: UserRole;
+      userId?: string;
+      membershipId?: string;
+      packageId?: string;
+    },
   ) {
-    // A) Price preview for one specific plan
-    if (opts.membershipId) {
-      const plan = await this.getOwned(clubId, opts.membershipId);
-      if (opts.role === UserRole.CONSUMER && !this.isAvailable(plan)) {
-        throw new NotFoundException('Membership not found');
-      }
-      const entry = plan.prices.find((p) => p.durationMinutes === durationMinutes);
-      if (!entry) {
+    // Consumers always use their assigned package; they cannot choose a plan or package.
+    if (
+      opts.role === UserRole.CONSUMER &&
+      (opts.membershipId || opts.packageId)
+    ) {
+      throw new BadRequestException(
+        'Consumers use the package assigned to their account and cannot select a membership or package',
+      );
+    }
+
+    // Admins select a concrete package because duration alone can have several rates.
+    if (opts.role === UserRole.CLUB_ADMIN) {
+      if (!opts.packageId) {
         throw new UnprocessableEntityException(
-          `The "${plan.name}" plan has no price for ${durationMinutes} minutes`,
+          'Select a membership package to preview its price',
+        );
+      }
+      const membershipPackage = await this.getOwnedPackage(clubId, opts.packageId);
+      const plan = membershipPackage.membership;
+      if (
+        !membershipPackage.isActive ||
+        !plan?.isActive ||
+        membershipPackage.bookingDurationMinutes !== durationMinutes ||
+        (opts.membershipId && opts.membershipId !== membershipPackage.membershipId)
+      ) {
+        throw new UnprocessableEntityException(
+          'The selected package is inactive or does not match this duration and membership',
         );
       }
       return {
-        price: entry.price,
+        price: membershipPackage.pricePerBooking,
         membership: { id: plan.id, name: plan.name },
-        userMembershipId: null as string | null,
+        package: this.toPackageResponse(membershipPackage),
+        userMembershipId: null,
+        bookingsRemaining: null,
       };
     }
 
@@ -466,7 +568,7 @@ export class MembershipsService {
       throw new BadRequestException('membershipId is required to preview a membership price');
     }
 
-    // B) The consumer's own active memberships (not cancelled, not expired)
+    // B) The consumer's own active package assignments, limited to packages that still have credits
     const now = new Date();
     const active = await this.userMembershipRepo.find({
       where: {
@@ -476,7 +578,7 @@ export class MembershipsService {
         cancelledAt: IsNull(),
         expiresAt: MoreThan(now),
       },
-      relations: { membership: { prices: true } },
+      relations: { membership: { prices: true }, package: true },
       withDeleted: true,
     });
 
@@ -486,29 +588,62 @@ export class MembershipsService {
       );
     }
 
-    // Only plans that have a price for this duration can be used
-    const candidates = active.flatMap((um) => {
-      const entry = um.membership.prices.find((p) => p.durationMinutes === durationMinutes);
-      return entry ? [{ um, price: entry.price }] : [];
-    });
-    if (candidates.length === 0) {
-      const names = active.map((um) => `"${um.membership.name}"`).join(', ');
+    const matchingDuration = active.filter(
+      (assignment) =>
+        assignment.package?.bookingDurationMinutes === durationMinutes,
+    );
+    if (matchingDuration.length === 0) {
       throw new UnprocessableEntityException(
-        `Your membership (${names}) has no price for ${durationMinutes} minutes`,
+        `Your assigned membership package does not include ${durationMinutes}-minute bookings.`,
       );
     }
 
-    // Cheapest wins; on a tie, the one that expires later
-    candidates.sort(
-      (a, b) => a.price - b.price || b.um.expiresAt.getTime() - a.um.expiresAt.getTime(),
+    const usage = await this.getConfirmedBookingCounts(
+      matchingDuration.map((assignment) => assignment.id),
     );
+    const candidates = matchingDuration.filter(
+      (assignment) =>
+        assignment.package &&
+        (usage.get(assignment.id) ?? 0) < assignment.package.includedBookings,
+    );
+    if (candidates.length === 0) {
+      throw new UnprocessableEntityException(
+        'Your membership package has no remaining booking credits.',
+      );
+    }
+
+    if (candidates.length > 1) {
+      throw new ConflictException(
+        'More than one active membership package can cover this booking. Contact the Club Admin to resolve the assignments.',
+      );
+    }
     const best = candidates[0];
 
     return {
-      price: best.price,
-      membership: { id: best.um.membershipId, name: best.um.membership.name },
-      userMembershipId: best.um.id as string | null,
+      price: best.package!.pricePerBooking,
+      membership: { id: best.membershipId, name: best.membership.name },
+      package: this.toPackageResponse(best.package!),
+      userMembershipId: best.id,
+      bookingsRemaining:
+        best.package!.includedBookings - (usage.get(best.id) ?? 0),
     };
+  }
+
+  private async getConfirmedBookingCounts(ids: string[]) {
+    const counts = new Map<string, number>();
+    if (ids.length === 0) return counts;
+
+    const rows = await this.bookingRepo
+      .createQueryBuilder('booking')
+      .select('booking.userMembershipId', 'userMembershipId')
+      .addSelect('COUNT(booking.id)', 'usedBookings')
+      .where('booking.userMembershipId IN (:...ids)', { ids })
+      .andWhere('booking.status = :status', { status: BookingStatus.CONFIRMED })
+      .groupBy('booking.userMembershipId')
+      .getRawMany<{ userMembershipId: string; usedBookings: string }>();
+
+    for (const row of rows) counts.set(row.userMembershipId, Number(row.usedBookings));
+    return counts;
   }
 
   // ---------- Helpers ----------
@@ -611,10 +746,15 @@ export class MembershipsService {
     return new ConflictException(`A membership named "${name}" already exists in this club`);
   }
 
-  private statusOf(um: UserMembership, now: Date): MembershipStatus {
+  private statusOf(
+    um: UserMembership,
+    now: Date,
+    usedBookings = 0,
+  ): MembershipStatus {
     if (um.cancelledAt) return 'CANCELLED';
     if (um.expiresAt <= now) return 'EXPIRED';
     if (um.startsAt > now) return 'SCHEDULED';
+    if (um.package && usedBookings >= um.package.includedBookings) return 'EXHAUSTED';
     return 'ACTIVE';
   }
 
@@ -642,8 +782,9 @@ export class MembershipsService {
     plan: Membership | null,
     now: Date,
     membershipPackage: MembershipPackage | null = um.package,
+    usedBookings = 0,
   ) {
-    const status = this.statusOf(um, now);
+    const status = this.statusOf(um, now, usedBookings);
     return {
       id: um.id,
       userId: um.userId,
@@ -658,6 +799,10 @@ export class MembershipsService {
       packageFee: um.packageFee,
       package: membershipPackage
         ? this.toPackageResponse(membershipPackage)
+        : null,
+      bookingsUsed: membershipPackage ? usedBookings : null,
+      bookingsRemaining: membershipPackage
+        ? Math.max(membershipPackage.includedBookings - usedBookings, 0)
         : null,
       consumer: um.user
         ? { id: um.user.id, name: um.user.name, email: um.user.email }

@@ -9,7 +9,12 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiConflictResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ClubId } from '../common/decorators/club-id.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
@@ -28,7 +33,11 @@ export class BookingsController {
 
   @Post()
   @Roles(UserRole.CONSUMER)
-  @ApiOperation({ summary: 'Book a court (price calculated on the server)' })
+  @ApiOperation({
+    summary: 'Book a court (price calculated on the server)',
+    description:
+      'Membership-based bookings use one credit from the assigned package. The server checks the package duration and remaining quota again inside the booking transaction.',
+  })
   create(
     @ClubId() clubId: string,
     @CurrentUser() user: AuthUser,
@@ -59,7 +68,15 @@ export class BookingsController {
 
   @Patch(':id/cancel')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Cancel a booking before it starts' })
+  @ApiOperation({
+    summary: 'Cancel a booking more than 30 minutes before it starts',
+    description:
+      'For membership bookings, a successful cancellation restores one package booking credit. Cancellation is rejected when 30 minutes or less remain.',
+  })
+  @ApiConflictResponse({
+    description:
+      'Booking is already cancelled, has started, or is within 30 minutes of its start.',
+  })
   cancel(
     @ClubId() clubId: string,
     @CurrentUser() user: AuthUser,

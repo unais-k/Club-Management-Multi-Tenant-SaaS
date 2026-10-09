@@ -16,7 +16,11 @@ export class AvailabilityController {
   constructor(private readonly availabilityService: AvailabilityService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Bookable slots (with prices) per court for a location, date and duration' })
+  @ApiOperation({
+    summary: 'Bookable slots and applicable membership package pricing',
+    description:
+      'Consumers receive their assigned package rate when it matches the requested duration and has remaining credits. Club Admins receive available package prices.',
+  })
   getAvailability(
     @ClubId() clubId: string,
     @CurrentUser() user: AuthUser,

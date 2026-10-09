@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { Booking } from '../bookings/entities/booking.entity.js';
 import { Location } from '../locations/entities/location.entity.js';
 import { Tenant } from '../tenants/entities/tenant.entity.js';
 import { User } from '../users/entities/user.entity.js';
@@ -18,6 +19,7 @@ import { MembershipsService } from './memberships.service.js';
       MembershipPackage,
       MembershipPrice,
       UserMembership,
+      Booking,
       Tenant,
       Location,
       User,

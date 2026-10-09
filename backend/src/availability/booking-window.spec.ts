@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { addDays } from '../common/helpers/date.js';
-import { evaluateBookingDate, hasStarted } from './booking-window.js';
+import {
+  evaluateBookingDate,
+  hasStarted,
+  isCancellationWindowClosed,
+} from './booking-window.js';
 
 const tz = 'Asia/Kolkata';
 const now = new Date('2026-10-08T02:40:00Z'); // 08:10 on 2026-10-08 in Kolkata (minute 490)
@@ -42,5 +46,19 @@ describe('hasStarted', () => {
     expect(hasStarted('2026-10-08', 480, tz, now)).toBe(true); // 08:00, now is 08:10
     expect(hasStarted('2026-10-08', 510, tz, now)).toBe(false); // 08:30
     expect(hasStarted('2026-10-09', 0, tz, now)).toBe(false);
+  });
+});
+
+describe('isCancellationWindowClosed', () => {
+  it('closes cancellation at 30 minutes before the start', () => {
+    expect(isCancellationWindowClosed('2026-10-08', 520, tz, now)).toBe(true);
+  });
+
+  it('allows cancellation when more than 30 minutes remain', () => {
+    expect(isCancellationWindowClosed('2026-10-08', 521, tz, now)).toBe(false);
+  });
+
+  it('closes cancellation for a past date', () => {
+    expect(isCancellationWindowClosed('2026-10-07', 1200, tz, now)).toBe(true);
   });
 });

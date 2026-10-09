@@ -38,3 +38,30 @@ export function hasStarted(
   const today = nowInTimezone(timeZone, now);
   return date < today.date || (date === today.date && startMinute <= today.minute);
 }
+
+/** Cancellation closes when 30 minutes or less remain before the start. */
+export function isCancellationWindowClosed(
+  date: string,
+  startMinute: number,
+  timeZone: string,
+  now = new Date(),
+): boolean {
+  const today = nowInTimezone(timeZone, now);
+  if (date < today.date) return true;
+  if (date > today.date) return false;
+
+  const seconds = Number(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone,
+      second: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(now)
+      .find((part) => part.type === 'second')!.value,
+  );
+  const milliseconds = now.getMilliseconds();
+  const currentMinute = today.minute + seconds / 60 + milliseconds / 60_000;
+  return startMinute - currentMinute <= 30;
+}

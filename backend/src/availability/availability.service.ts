@@ -90,6 +90,7 @@ export class AvailabilityService {
       courtIds: bookable.map((c) => c.id),
       durationMinutes: q.durationMinutes,
       membershipId: q.membershipId,
+      packageId: q.packageId,
     });
 
     // 6. Run the engine for each court

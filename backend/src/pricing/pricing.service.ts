@@ -32,7 +32,16 @@ const RESERVED_SHIFT_NAMES = ['normal', 'default'];
 
 export interface SlotPrice {
   price: number | null;
-  prices?: { membershipId: string; membershipName: string; price: number }[];
+  prices?: {
+    packageId: string;
+    membershipId: string;
+    membershipName: string;
+    validityDays: number;
+    bookingDurationMinutes: number;
+    includedBookings: number;
+    price: number;
+    packageFee: number;
+  }[];
   breakdown?: QuoteSegment[]; // only when the slot crosses two or more shifts
   priceNote?: string; // why the price is missing
 }
@@ -40,6 +49,7 @@ export interface SlotPrice {
 export interface Pricer {
   model: PricingModel;
   membership: { id: string; name: string } | null;
+  userMembershipId: string | null;
   note: string | null;
   priceFor: (courtId: string, startMinute: number) => SlotPrice;
 }
@@ -283,6 +293,21 @@ export class PricingService {
 
     // ----- Membership-based club -----
     if (model === PricingModel.MEMBERSHIP_BASED) {
+      if (user.role === UserRole.CLUB_ADMIN && !q.packageId) {
+        const packages = await this.membershipsService.listPackageQuotes(
+          clubId,
+          q.durationMinutes,
+          q.membershipId,
+        );
+        return {
+          ...base,
+          total: null,
+          membership: null,
+          packages,
+          segments: [],
+        };
+      }
+
       const resolved = await this.membershipsService.resolvePrice(
         clubId,
         q.durationMinutes,
@@ -290,21 +315,25 @@ export class PricingService {
           role: user.role,
           userId: user.role === UserRole.CONSUMER ? user.id : undefined,
           membershipId: q.membershipId,
+          packageId: q.packageId,
         },
       );
       return {
         ...base,
         total: resolved.price,
         membership: resolved.membership,
-        userMembershipId: resolved.userMembershipId,
+        package: resolved.package,
+        ...(user.role === UserRole.CONSUMER && {
+          bookingsRemaining: resolved.bookingsRemaining,
+        }),
         segments: [],
       };
     }
 
     // ----- Shift-based club (unchanged from Step 8) -----
-    if (q.membershipId) {
+    if (q.membershipId || q.packageId) {
       throw new BadRequestException(
-        'membershipId only applies to membership-based clubs',
+        'membershipId and packageId only apply to membership-based clubs',
       );
     }
 
@@ -338,46 +367,44 @@ export class PricingService {
       courtIds: string[];
       durationMinutes: number;
       membershipId?: string;
+      packageId?: string;
     },
   ): Promise<Pricer> {
-    const { model, locationId, courtIds, durationMinutes, membershipId } = args;
+    const {
+      model,
+      locationId,
+      courtIds,
+      durationMinutes,
+      membershipId,
+      packageId,
+    } = args;
 
     // ----- Membership-based: one price for every slot, resolved once -----
     if (model === PricingModel.MEMBERSHIP_BASED) {
-      if (user.role === UserRole.CLUB_ADMIN && !membershipId) {
-        const plans = await this.membershipsService.findAll(clubId, user.role);
-        const prices = plans
-          .filter((plan) => plan.isActive)
-          .flatMap((plan) => {
-            const entry = plan.prices.find(
-              (candidate) => candidate.durationMinutes === durationMinutes,
-            );
-            return entry
-              ? [
-                  {
-                    membershipId: plan.id,
-                    membershipName: plan.name,
-                    price: entry.price,
-                  },
-                ]
-              : [];
-          });
+      if (user.role === UserRole.CLUB_ADMIN && !packageId) {
+        const prices = await this.membershipsService.listPackageQuotes(
+          clubId,
+          durationMinutes,
+          membershipId,
+        );
 
         return {
           model,
           membership: null,
+          userMembershipId: null,
           note: prices.length
             ? null
-            : `No active membership plan has a price for ${durationMinutes} minutes`,
+            : `No active membership package has a price for ${durationMinutes} minutes`,
           priceFor: () => ({ price: null, prices }),
         };
       }
 
       let price: number | null = null;
       let membership: Pricer['membership'] = null;
+      let userMembershipId: string | null = null;
       let note: string | null = null;
 
-      if (user.role === UserRole.CONSUMER || membershipId) {
+      if (user.role === UserRole.CONSUMER || membershipId || packageId) {
         try {
           const resolved = await this.membershipsService.resolvePrice(
             clubId,
@@ -386,26 +413,34 @@ export class PricingService {
               role: user.role,
               userId: user.role === UserRole.CONSUMER ? user.id : undefined,
               membershipId,
+              packageId,
             },
           );
           price = resolved.price;
           membership = resolved.membership;
+          userMembershipId = resolved.userMembershipId;
         } catch (err) {
           // "no membership" / "no price for this duration": keep the slots, explain the price
           if (!(err instanceof UnprocessableEntityException)) throw err;
           note = err.message;
         }
       } else {
-        note = 'Pass membershipId to preview the price of a membership plan';
+        note = 'Select a package to preview a membership price';
       }
 
-      return { model, membership, note, priceFor: () => ({ price }) };
+      return {
+        model,
+        membership,
+        userMembershipId,
+        note,
+        priceFor: () => ({ price }),
+      };
     }
 
     // ----- Shift-based -----
-    if (membershipId) {
+    if (membershipId || packageId) {
       throw new BadRequestException(
-        'membershipId only applies to membership-based clubs',
+        'membershipId and packageId only apply to membership-based clubs',
       );
     }
 
@@ -426,6 +461,7 @@ export class PricingService {
     return {
       model,
       membership: null,
+      userMembershipId: null,
       note: null,
       priceFor: (courtId, startMinute) => {
         try {

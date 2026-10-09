@@ -86,7 +86,11 @@ export class PricingController {
 
   @Get('quote')
   @Roles(UserRole.CLUB_ADMIN, UserRole.CONSUMER)
-  @ApiOperation({ summary: 'Calculate the price for a court, start time and duration' })
+  @ApiOperation({
+    summary: 'Calculate a booking price or list matching package prices',
+    description:
+      'Consumers are quoted from their assigned active package. Club Admins may omit packageId to list available package options or pass one packageId for its exact price.',
+  })
   quote(
     @ClubId() clubId: string,
     @CurrentUser() user: AuthUser,

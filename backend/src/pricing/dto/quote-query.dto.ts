@@ -10,11 +10,19 @@ export class QuoteQueryDto {
   
   @ApiPropertyOptional({
     description:
-      'Membership-based clubs: preview the price of this plan. Required for admins; consumers default to their own active membership.',
+      'Club Admins may filter package options by membership plan. Consumers always use their assigned active package.',
   })
   @IsOptional()
   @IsUUID()
   membershipId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Club Admin only: select a specific package option to return its price.',
+  })
+  @IsOptional()
+  @IsUUID()
+  packageId?: string;
 
   @ApiProperty({ example: '08:30' })
   @Matches(TIME_PATTERN, { message: 'startTime must be HH:mm (24-hour)' })
