@@ -22,9 +22,9 @@ export class MeMembershipController {
 
   @Get()
   @ApiOperation({
-    summary: 'Get my current and scheduled memberships plus history',
+    summary: 'Get my current, scheduled, pending-payment, and historical memberships',
     description:
-      'Membership packages are assigned by the Club Admin. Consumers cannot self-subscribe or cancel an assignment.',
+      'Membership packages are assigned by the Club Admin. Consumers cannot self-subscribe or cancel an assignment. The response includes payment status, booking quota usage, and printable receipt details when checkout is confirmed.',
   })
   mine(@ClubId() clubId: string, @CurrentUser() user: AuthUser) {
     return this.membershipsService.myMemberships(clubId, user.id);

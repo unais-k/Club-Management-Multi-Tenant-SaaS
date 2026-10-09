@@ -69,7 +69,7 @@ export class MembershipsController {
   @ApiOperation({
     summary: 'List membership assignments for this club',
     description:
-      'Active assignments are returned first, ordered by soonest expiry, followed by scheduled assignments and history.',
+      'Active assignments are returned first, ordered by soonest expiry, followed by pending-payment assignments, scheduled renewals, and history. Active assignments with 5 or fewer days remaining are renewal-eligible.',
   })
   @ApiOkResponse({ description: 'Club-scoped membership assignments.' })
   listAssignments(
@@ -81,7 +81,11 @@ export class MembershipsController {
 
   @Get()
   @Roles(UserRole.CLUB_ADMIN, UserRole.CONSUMER)
-  @ApiOperation({ summary: 'List membership plans with their prices' })
+  @ApiOperation({
+    summary: 'List membership plans',
+    description:
+      'Club Admins manage package options under each plan. Legacy duration prices may also be returned for price-preview compatibility.',
+  })
   findAll(@ClubId() clubId: string, @CurrentUser() user: AuthUser) {
     return this.membershipsService.findAll(clubId, user.role);
   }
@@ -98,7 +102,7 @@ export class MembershipsController {
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update a plan (name, description, validity, active)' })
+  @ApiOperation({ summary: 'Update a membership plan' })
   update(
     @ClubId() clubId: string,
     @Param('id', ParseUUIDPipe) id: string,

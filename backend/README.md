@@ -1,114 +1,96 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Backend API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS, TypeORM, and PostgreSQL API for the Club Management multi-tenant SaaS.
+The backend owns authentication, club scoping, availability, pricing, bookings,
+membership packages, and booking-credit enforcement.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Setup
 
-## Description
+Requirements: Node.js 20+ and PostgreSQL 14+.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+1. Create a PostgreSQL database.
+2. Install dependencies with `npm install`.
+3. Copy `.env.example` to `.env.local` and set the database connection, JWT
+   secrets, CORS origins, and platform admin credentials.
+4. Apply database migrations with `npm run migration:run`.
+5. Optionally load the sample clubs with `npm run seed`.
+6. Start in watch mode with `npm run start:dev`.
 
-## Project setup
+The API defaults to `http://localhost:3000`; interactive Swagger documentation
+is served at `/docs`.
+
+## Database workflow
+
+TypeORM synchronization is disabled. The migration source is consolidated into
+one file: `src/database/migrations/1791442532556-InitialSchema.ts`. It exports
+the ordered migration classes with their original names. Keeping those names
+lets existing databases recognize migrations they already applied, while a
+fresh database receives the schema in order.
+
+| Command | Purpose |
+|---|---|
+| `npm run migration:run` | Apply migrations not yet recorded in this database |
+| `npm run migration:show` | Show migration status |
+| `npm run migration:generate -- src/database/migrations/Name` | Generate a migration from entity changes |
+| `npm run migration:revert` | Revert the most recently applied migration |
+| `npm run seed` | Add demo data; existing demo club slugs are skipped |
+| `npm run seed:reset` | Clear app tables and load the demo data again |
+
+`seed:reset` is intended for development data. It clears existing application
+rows before reseeding; it does not drop the schema or migration history.
+
+For future schema changes, generate the migration as usual, then move its
+exported class into the consolidated migration source file and remove the
+standalone generated file. Keep the generated class name and timestamp intact;
+already applied migration names must not be renamed.
+
+## Demo seed data
+
+Demo account password: `Demo@12345` (platform admin password is read from the
+environment).
+
+| Club | Role | Email | Seed state |
+|---|---|---|---|
+| `downtown-sports` | Club Admin | `admin@downtown.com` | Shift-based club |
+| `downtown-sports` | Consumer | `aisha@downtown.com` | Upcoming and past bookings |
+| `downtown-sports` | Consumer | `omar@downtown.com` | Upcoming and cancelled bookings |
+| `lakeside-racquet` | Club Admin | `admin@lakeside.com` | Membership-based club |
+| `lakeside-racquet` | Consumer | `lena@lakeside.com` | Active Premium package and simulated receipt |
+| `lakeside-racquet` | Consumer | `sam@lakeside.com` | Expired Basic package history |
+| `lakeside-racquet` | Consumer | `amir@lakeside.com` | VIP assignment awaiting demo checkout |
+
+Membership seed data contains packages for 30, 60, and 90-minute bookings,
+each with 30-day validity and 24 included bookings. Package fees are numeric
+values computed from rate per booking multiplied by quota. Demo payment rows
+are simulated records; they do not represent money collected.
+
+## Membership package rules
+
+- Club Admins create memberships and their package options, then assign a
+  package to an already registered consumer in the club context.
+- A package defines validity days, booking duration, included booking quota,
+  and rate per booking. The backend computes its fee; currency symbols are a
+  UI concern.
+- Each consumer may have one current assignment per club. A renewal is allowed
+  when five or fewer days remain; it starts after the current package and has a
+  fresh quota.
+- Only confirmed bookings consume quota. A cancellation more than 30 minutes
+  before start restores the credit; cancellation within 30 minutes is rejected.
+- Consumer demo checkout changes the assignment to eligible and creates a
+  printable `SIMULATED_PAID` receipt. There is no payment gateway and no real
+  money collection.
+- Booking and membership history is scoped by the authenticated club and user.
+
+## Useful scripts
 
 ```bash
-$ npm install
+npm run start:dev
+npm run build
+npm run test
+npm run test:e2e
+npm run test:isolation
 ```
 
-## Compile and run the project
-
-```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
-```
-
-## Run tests
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+See the [root README](../README.md), [ERD](../docs/erd.md),
+[architecture](../docs/architecture.md), [progress log](../docs/progress-log.md),
+and the generated [OpenAPI specification](../docs/openapi.json).

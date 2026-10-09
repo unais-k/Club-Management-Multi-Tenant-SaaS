@@ -1,4 +1,7 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
+
+// Kept as ordered migration classes in one source file so databases that already
+// recorded these migration names continue to recognize them without rerunning DDL.
 
 export class InitialSchema1791442532556 implements MigrationInterface {
     name = 'InitialSchema1791442532556'
@@ -113,4 +116,191 @@ export class InitialSchema1791442532556 implements MigrationInterface {
         await queryRunner.query(`DROP TYPE "public"."users_role_enum"`);
     }
 
+}
+
+/** Add package quotas and retain amount snapshots for bookings. */
+export class MembershipPackages1791528932556 implements MigrationInterface {
+  name = 'MembershipPackages1791528932556';
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      CREATE TABLE "membership_packages" (
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "clubId" uuid NOT NULL,
+        "membershipId" uuid NOT NULL,
+        "validityDays" integer NOT NULL,
+        "bookingDurationMinutes" integer NOT NULL,
+        "includedBookings" integer NOT NULL,
+        "pricePerBooking" numeric(10,2) NOT NULL,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+        "updatedAt" TIMESTAMP NOT NULL DEFAULT now(),
+        CONSTRAINT "CHK_membership_package_validity" CHECK ("validityDays" > 0),
+        CONSTRAINT "CHK_membership_package_duration" CHECK ("bookingDurationMinutes" > 0),
+        CONSTRAINT "CHK_membership_package_quota" CHECK ("includedBookings" > 0),
+        CONSTRAINT "CHK_membership_package_rate" CHECK ("pricePerBooking" >= 0),
+        CONSTRAINT "PK_membership_packages" PRIMARY KEY ("id")
+      )
+    `);
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX "UQ_membership_package_option" ON "membership_packages" ("membershipId", "validityDays", "bookingDurationMinutes")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_membership_packages_club_plan" ON "membership_packages" ("clubId", "membershipId")`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "membership_packages" ADD CONSTRAINT "FK_membership_packages_membership" FOREIGN KEY ("membershipId") REFERENCES "memberships"("id") ON DELETE CASCADE ON UPDATE NO ACTION`,
+    );
+
+    // Nullable package linkage keeps old development rows readable during rollout.
+    await queryRunner.query(
+      `ALTER TABLE "user_memberships" ADD "packageId" uuid`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "user_memberships" ADD "packageFee" numeric(10,2)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "user_memberships" ADD CONSTRAINT "CHK_user_membership_package_fee" CHECK ("packageFee" IS NULL OR "packageFee" >= 0)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "user_memberships" ADD CONSTRAINT "FK_user_memberships_package" FOREIGN KEY ("packageId") REFERENCES "membership_packages"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_user_memberships_package" ON "user_memberships" ("packageId")`,
+    );
+
+    await queryRunner.query(
+      `ALTER TABLE "bookings" ADD "userMembershipId" uuid`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "bookings" ADD CONSTRAINT "FK_bookings_user_membership" FOREIGN KEY ("userMembershipId") REFERENCES "user_memberships"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_bookings_user_membership" ON "bookings" ("userMembershipId")`,
+    );
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_bookings_user_membership"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "bookings" DROP CONSTRAINT "FK_bookings_user_membership"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "bookings" DROP COLUMN "userMembershipId"`,
+    );
+
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_user_memberships_package"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "user_memberships" DROP CONSTRAINT "FK_user_memberships_package"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "user_memberships" DROP CONSTRAINT "CHK_user_membership_package_fee"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "user_memberships" DROP COLUMN "packageFee"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "user_memberships" DROP COLUMN "packageId"`,
+    );
+
+    await queryRunner.query(
+      `ALTER TABLE "membership_packages" DROP CONSTRAINT "FK_membership_packages_membership"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_membership_packages_club_plan"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."UQ_membership_package_option"`,
+    );
+    await queryRunner.query(`DROP TABLE "membership_packages"`);
+  }
+}
+
+/** Allow package versions to be retired without changing existing assignments. */
+export class MembershipPackageLifecycle1791615332556 implements MigrationInterface {
+  name = 'MembershipPackageLifecycle1791615332556';
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE "membership_packages" ADD "isActive" boolean NOT NULL DEFAULT true`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."UQ_membership_package_option"`,
+    );
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX "UQ_membership_package_option" ON "membership_packages" ("membershipId", "validityDays", "bookingDurationMinutes") WHERE "isActive" = true`,
+    );
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `DROP INDEX "public"."UQ_membership_package_option"`,
+    );
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX "UQ_membership_package_option" ON "membership_packages" ("membershipId", "validityDays", "bookingDurationMinutes")`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "membership_packages" DROP COLUMN "isActive"`,
+    );
+  }
+}
+
+/** Add a clearly simulated package checkout and receipt record. */
+export class MembershipPackageDemoPayments1791700000000
+  implements MigrationInterface
+{
+  name = 'MembershipPackageDemoPayments1791700000000';
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE "user_memberships" ADD "paidAt" TIMESTAMPTZ`,
+    );
+    await queryRunner.query(`
+      CREATE TABLE "membership_payments" (
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "clubId" uuid NOT NULL,
+        "userId" uuid NOT NULL,
+        "userMembershipId" uuid NOT NULL,
+        "amount" numeric(10,2) NOT NULL,
+        "status" varchar(20) NOT NULL DEFAULT 'PENDING',
+        "method" varchar(20),
+        "paidAt" TIMESTAMPTZ,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+        "updatedAt" TIMESTAMP NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_membership_payments" PRIMARY KEY ("id"),
+        CONSTRAINT "CHK_membership_payment_amount" CHECK ("amount" >= 0),
+        CONSTRAINT "CHK_membership_payment_state" CHECK (
+          ("status" = 'PENDING' AND "method" IS NULL AND "paidAt" IS NULL)
+          OR
+          ("status" = 'SIMULATED_PAID' AND "method" = 'DEMO' AND "paidAt" IS NOT NULL)
+        ),
+        CONSTRAINT "FK_membership_payment_assignment" FOREIGN KEY ("userMembershipId")
+          REFERENCES "user_memberships"("id") ON DELETE RESTRICT ON UPDATE NO ACTION,
+        CONSTRAINT "FK_membership_payment_user" FOREIGN KEY ("userId")
+          REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE NO ACTION
+      )
+    `);
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX "UQ_membership_payment_assignment" ON "membership_payments" ("userMembershipId")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_membership_payments_member_date" ON "membership_payments" ("clubId", "userId", "createdAt")`,
+    );
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_membership_payments_member_date"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."UQ_membership_payment_assignment"`,
+    );
+    await queryRunner.query(`DROP TABLE "membership_payments"`);
+    await queryRunner.query(
+      `ALTER TABLE "user_memberships" DROP COLUMN "paidAt"`,
+    );
+  }
 }

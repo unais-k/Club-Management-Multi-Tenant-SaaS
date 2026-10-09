@@ -40,7 +40,14 @@ Files load in this order, and the first file that defines a variable wins: `.env
 | `npm run migration:generate -- src/database/migrations/Name` | Create a migration from entity changes |
 | `npm run migration:revert` | Undo the last migration |
 | `npm run seed` | Add the demo data (skips what exists) |
-| `npm run seed:reset` | Empty all tables, then add the demo data |
+| `npm run seed:reset` | Clear app tables, then load the demo data |
+
+The ordered TypeORM migrations are stored in one source file,
+`backend/src/database/migrations/1791442532556-InitialSchema.ts`. Each migration
+class retains its original name so databases that already recorded the earlier
+migrations continue to recognize them. Run `npm run migration:run` from
+`backend`; it applies only migrations not yet recorded by that database.
+`seed:reset` clears existing application data before creating the demo clubs.
 
 ### Demo accounts (after `npm run seed`)
 All demo users have the password `Demo@12345`.
@@ -51,7 +58,7 @@ All demo users have the password `Demo@12345`.
 | Downtown admin (shift-based club) | downtown-sports | admin@downtown.com |
 | Downtown consumers | downtown-sports | aisha@downtown.com, omar@downtown.com |
 | Lakeside admin (membership-based club) | lakeside-racquet | admin@lakeside.com |
-| Lakeside consumers | lakeside-racquet | lena@lakeside.com (Premium), sam@lakeside.com (expired Basic) |
+| Lakeside consumers | lakeside-racquet | lena@lakeside.com (active Premium), sam@lakeside.com (expired Basic), amir@lakeside.com (VIP awaiting demo checkout) |
 
 ### Tests
 - `npm run test`: unit tests (availability engine, pricing, dates)
@@ -69,7 +76,9 @@ See [docs/architecture.md](docs/architecture.md) and [docs/erd.md](docs/erd.md).
 - **Court hours vs location hours:** a court's hours must lie inside the location's merged opening hours; the availability engine also intersects them as a safety net.
 - **Availability:** one pure, unit-tested engine: (location hours ∩ court hours) − unavailable periods − bookings. The availability screen and the booking API share it, so they cannot disagree.
 - **Shift pricing:** time outside shifts uses the Normal price. A booking that crosses shifts is prorated by minutes (08:30-09:30 across a 09:00 boundary = half at each rate).
-- **Membership pricing:** no or expired membership gives 422 (browsing still works); a plan without a price for the duration is skipped; with several memberships the cheapest applicable price wins.
+- **Membership packages:** the Club Admin creates validity/duration/quota packages and assigns one to a registered consumer. One current assignment per consumer per club; renewals are allowed when 5 or fewer days remain and start after the current package. Quota is fresh and does not carry over.
+- **Membership bookings:** the assigned active package determines the booking rate and consumes one credit. Cancellation more than 30 minutes before start restores the credit; cancellation within 30 minutes is rejected.
+- **Demo checkout:** consumers can confirm a simulated package payment to activate an assignment and get a printable receipt. No money is collected and no payment provider is connected. Booking receipts are printable too.
 - **No double bookings (3 layers):** shared validation, a row lock on the court inside a transaction, and a PostgreSQL exclusion constraint. Verified by a parallel-request script.
 - **Bookings keep a price snapshot** and are cancelled, never deleted.
 - **Time model:** minutes from midnight, `HH:mm` in the API, dates and "now" in the club's timezone.
@@ -77,7 +86,7 @@ See [docs/architecture.md](docs/architecture.md) and [docs/erd.md](docs/erd.md).
 - **Errors** always use one shape: `{ statusCode, error, message, errors?, path, timestamp }`.
 
 ## Assumptions
-- One currency (the UI chooses the symbol); no payment gateway (membership purchase is instant).
+- Amounts are stored as numeric values; the UI displays `$`. Demo checkout records a simulated payment only; there is no payment gateway or real payment collection.
 - Shifts apply to every day of the week; bookings cannot cross midnight.
 - Slot start times follow a grid (GCD of the location's durations); bookings are allowed up to 60 days ahead.
 - Membership validity is checked when booking, not on the play date.
@@ -86,4 +95,4 @@ See [docs/architecture.md](docs/architecture.md) and [docs/erd.md](docs/erd.md).
 - `clubId` on child tables is set by the service layer; the database does not enforce it with composite foreign keys.
 - Changing opening hours, court hours or durations does not re-check existing bookings (only courts are checked).
 - One refresh token per user (a new login replaces the old session); access tokens stay valid until expiry after logout.
-- Availability is computed per request (no caching); no payments, refunds or cancellation deadlines.
+- Availability is computed per request (no caching); no real payment processing, refunds or payment reconciliation.

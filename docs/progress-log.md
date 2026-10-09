@@ -188,34 +188,52 @@ Each part of the booking is charged at the price of its own shift for the full d
 
 **Known limitations:** no per-day shifts (weekday vs weekend); single currency; overnight bookings not supported; the quote does not check availability (done in the booking step).
 
-## Step 9: Pricing, membership-based
+## Step 9: Membership packages and Club Admin assignment
 
-**Goal:** Let MEMBERSHIP_BASED clubs define plans and prices, let consumers subscribe, and price bookings from the consumer's membership.
+**Goal:** Let each membership plan contain package options, have Club Admins
+assign them to registered consumers, and enforce package validity and booking
+quotas.
 
-**Tables:** memberships, membership_prices, user_memberships (all carry club_id)
+**Tables:** `memberships`, `membership_prices` (legacy price previews),
+`membership_packages`, `user_memberships`, and `membership_payments`.
+Membership-owned rows include `clubId`; bookings reference the exact
+`userMembershipId` whose quota they consume.
 
-**Endpoints:** POST/GET/GET:id/PUT/DELETE /memberships, PUT /memberships/:id/prices, POST /memberships/:id/subscribe, GET /me/membership, DELETE /me/membership/:id; GET /pricing/quote now handles both pricing models
+**Endpoints:** Club Admin routes include `GET /memberships/consumers`,
+`GET /memberships/assignments`, `GET/POST /memberships/:id/packages`,
+`PUT /memberships/packages/:packageId`, and
+`POST /memberships/:id/assignments`. Consumers use `GET /me/membership` and
+`POST /me/membership/:id/confirm-demo-payment`. Booking quotes and creation use
+the assigned package; consumers cannot choose an arbitrary membership or
+package.
 
-**Edge cases (decisions):**
+**Rules and decisions:**
 
-- No membership: no price, 422 "active membership required" (the plans and prices stay visible so the consumer can choose one)
-- Expired membership: same as no membership; status is calculated (ACTIVE / EXPIRED / CANCELLED), never stored
-- Plan without a price for the duration: that plan is skipped; if no active plan has one, 422 naming the duration
-- Multiple memberships: allowed (upgrades); the cheapest applicable price wins, a tie goes to the later expiry; subscribing to the same plan twice while active returns 409
+- A package stores validity days, booking duration, included booking count, and
+  a numeric rate per booking. The backend calculates package fee as rate times
+  quota; clients display `$` without putting a currency symbol in stored data.
+- A consumer can have one current assignment per club. The Club Admin may
+  assign a renewal when five or fewer days remain; it starts after the current
+  assignment expires with a fresh quota and no credit carryover.
+- Confirmed bookings consume one credit. Cancellation more than 30 minutes
+  before start restores the credit because only confirmed bookings count
+  toward quota. Cancellation within 30 minutes is rejected.
+- Demo checkout records a `SIMULATED_PAID` payment row and printable receipt;
+  it does not collect money or call a payment gateway. Unconfirmed assignments
+  cannot be used for bookings.
+- Package terms become immutable after assignment. Admins deactivate the old
+  option and create a replacement so existing assignments retain their terms.
+- Consumer accounts register under a club slug. Club Admin assignment/search
+  is limited to consumer accounts in that club context.
+- The assignment list places active packages with the soonest expiry first;
+  the Admin UI highlights the five-day renewal window.
 
-**Rules:**
+**Tenant isolation:** package, assignment, payment, and consumer-search queries
+are scoped by the authenticated `clubId`.
 
-- Only MEMBERSHIP_BASED clubs can create plans or prices; shift clubs get an empty plan list
-- Price durations must be offered by at least one location; no duplicates; price >= 0 with max 2 decimals; prices replaced as a whole in a transaction; DB unique index and CHECK constraints
-- Consumers only see active plans that have prices; admins see missingDurations
-- Deactivating a plan keeps existing subscriptions; deleting is soft and blocked while anyone holds the plan
-- Subscribing takes a row lock on the user inside a transaction to prevent duplicate parallel subscriptions
-- Membership validity is checked at booking time, not on the play date; cancelling ends the membership immediately (no payments or refunds)
-- `MembershipsService.resolvePrice` is shared: the quote uses it now and bookings will use it in Step 10
-
-**Tenant isolation:** every lookup filters by club_id; other clubs get 404 (tested).
-
-**Known limitations:** no payment gateway; no renewal or auto-renewal flow (subscribe again after expiry); membership validity not checked against the play date; prices are not per court or per location.
+**Receipts:** consumers can print simulated membership payment receipts and
+booking receipts. Shift-based bookings also have printable booking receipts;
+they clearly state that no payment was collected.
 
 ## Step 10 (part 1): Availability engine
 
@@ -247,7 +265,7 @@ A slot is bookable only if the whole range lies inside one free window.
 
 **Table:** bookings (club_id, location, court, user, date, start/end minute, duration, price snapshot, pricing model, plan snapshot, status, cancelled_at). Partial index on (court_id, date) for CONFIRMED rows; CHECK constraints on range, duration and price.
 
-**Endpoint:** GET /availability?locationId&date&durationMinutes[&membershipId]
+**Endpoint:** GET /availability?locationId&date&durationMinutes[&membershipId&packageId]
 
 **Flow:** load club, location (with hours), courts (with hours), unavailable periods and confirmed bookings of the date, then run the engine per court. About 7 queries per request regardless of the number of slots.
 
@@ -257,7 +275,7 @@ A slot is bookable only if the whole range lies inside one free window.
 - Duration must be offered by the location; courts that do not offer it are omitted; inactive courts omitted; inactive location is a 404 for consumers
 - A closed day returns empty slots and a notice (not an error)
 - Shift-based: price per slot, prorated across shifts with a breakdown; a missing price gives price null with a note
-- Membership-based: one price for all slots, resolved once from the consumer's membership; no membership gives null with a note (browsing still works); admins preview with membershipId
+- Membership-based: one price for all slots, resolved once from the consumer's assigned active package; consumers browse availability without a membership price and cannot book without an eligible package; admins preview with a packageId
 - `PricingService.createPricer` loads shifts and court prices once (no per-slot queries)
 - Only CONFIRMED bookings block a court; bookings are cancelled by status and never deleted; they keep a price snapshot
 
@@ -291,13 +309,13 @@ A slot is bookable only if the whole range lies inside one free window.
 **Other rules:**
 
 - Bookings store a price snapshot (price, pricing model, plan name); cancelled, never deleted; only CONFIRMED rows block a court
-- Cancel is allowed until the start time (atomic UPDATE ... WHERE status = CONFIRMED); admins can cancel any booking of their club
+- Cancellation is rejected after start and within 30 minutes of start (atomic status update); admins can cancel any booking of their club. Membership booking credits are restored when cancellation succeeds.
 - Consumers see only their own bookings; admins see the whole club's, with user details; filters: status, period (upcoming = not ended), location, court, date range; history keeps names of deleted courts and locations
 - A court or location with upcoming bookings cannot be deleted (409); an unavailable period cannot be added over confirmed bookings (409)
 
 **Tenant isolation:** every booking query filters by club_id; consumers additionally by user_id.
 
-**Known limitations:** opening hours are read just before the lock (admin config edited in that instant is not seen); changing opening hours, court hours or durations does not re-check existing bookings; a consumer can hold overlapping bookings on different courts; no payment step; no cancellation deadline or refund rules; the constraint is created at startup (it moves into a migration in the wrap-up).
+**Known limitations:** opening hours are read just before the lock (admin config edited in that instant is not seen); changing opening hours, court hours or durations does not re-check existing bookings; a consumer can hold overlapping bookings on different courts; there is no real payment processing or refund flow.
 
 ## Step 12: Backend wrap-up
 
@@ -305,8 +323,8 @@ A slot is bookable only if the whole range lies inside one free window.
 
 **Done:**
 
-- Migrations replace `synchronize` (TypeORM CLI run with tsx; data source in `src/database`). The booking overlap constraint is now declared on the entity (`@Exclusion`), so it ships inside the migration.
-- Seed script (`npm run seed`, `seed:reset`): two demo clubs (shift-based and membership-based) with locations, courts, shifts, plans, users and bookings; idempotent
+- Migrations replace `synchronize` (TypeORM CLI run with tsx; data source in `src/database`). All ordered migration classes live in one source file, preserving their existing class names so applied database history remains recognized.
+- Seed script (`npm run seed`, `npm run seed:reset`): two demo clubs with locations, courts, shifts, membership packages, current/expired/pending assignments, simulated receipt records, and bookings. The reset command clears app tables before reseeding.
 - Env validation at startup (required keys, secrets at least 32 characters and different); CORS limited to the admin panel and the consumer site
 - One error format for every response (`statusCode, error, message, errors?, path, timestamp`); unexpected errors are logged but never leaked
 - Rate limiting: 120 requests per minute per IP in general, 10 per minute on login, register and refresh

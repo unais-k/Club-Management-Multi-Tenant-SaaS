@@ -1112,10 +1112,11 @@
                         "bearer": []
                     }
                 ],
-                "summary": "List membership plans with their prices",
+                "summary": "List membership plans",
                 "tags": [
                     "Memberships"
-                ]
+                ],
+                "description": "Club Admins manage package options under each plan. Legacy duration prices may also be returned for price-preview compatibility."
             }
         },
         "/memberships/{id}": {
@@ -1178,7 +1179,7 @@
                         "bearer": []
                     }
                 ],
-                "summary": "Update a plan (name, description, validity, active)",
+                "summary": "Update a membership plan",
                 "tags": [
                     "Memberships"
                 ]
@@ -1250,35 +1251,6 @@
                 ]
             }
         },
-        "/memberships/{id}/subscribe": {
-            "post": {
-                "operationId": "MembershipsController_subscribe",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "required": true,
-                        "in": "path",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": ""
-                    }
-                },
-                "security": [
-                    {
-                        "bearer": []
-                    }
-                ],
-                "summary": "Subscribe to a plan (no payment in this assessment)",
-                "tags": [
-                    "Memberships"
-                ]
-            }
-        },
         "/me/membership": {
             "get": {
                 "operationId": "MeMembershipController_mine",
@@ -1293,39 +1265,11 @@
                         "bearer": []
                     }
                 ],
-                "summary": "My current membership, all active ones, and history",
+                "summary": "Get my current, scheduled, pending-payment, and historical memberships",
                 "tags": [
                     "Memberships"
-                ]
-            }
-        },
-        "/me/membership/{id}": {
-            "delete": {
-                "operationId": "MeMembershipController_cancel",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "required": true,
-                        "in": "path",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
                 ],
-                "responses": {
-                    "204": {
-                        "description": ""
-                    }
-                },
-                "security": [
-                    {
-                        "bearer": []
-                    }
-                ],
-                "summary": "Cancel one of my memberships (ends immediately)",
-                "tags": [
-                    "Memberships"
-                ]
+                "description": "Membership packages are assigned by the Club Admin. Consumers cannot self-subscribe or cancel an assignment. The response includes payment status, booking quota usage, and printable receipt details when checkout is confirmed."
             }
         },
         "/locations/{locationId}/courts": {
@@ -1581,11 +1525,302 @@
                     "Availability"
                 ]
             }
+        },
+        "/memberships/consumers": {
+            "get": {
+                "operationId": "MembershipsController_searchConsumers",
+                "parameters": [
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 190
+                        },
+                        "description": "Filter consumers or assignments by name or email."
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Consumers registered in this club context.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {
+                                                "type": "string",
+                                                "format": "uuid"
+                                            },
+                                            "name": {
+                                                "type": "string"
+                                            },
+                                            "email": {
+                                                "type": "string",
+                                                "format": "email"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Search existing consumers registered in this club",
+                "tags": [
+                    "Memberships"
+                ]
+            }
+        },
+        "/memberships/assignments": {
+            "get": {
+                "operationId": "MembershipsController_listAssignments",
+                "parameters": [
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 190
+                        },
+                        "description": "Filter consumers or assignments by name or email."
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Club-scoped assignments, active assignments ordered by soonest expiry first."
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "List membership assignments for this club",
+                "tags": [
+                    "Memberships"
+                ],
+                "description": "Active assignments are returned first, ordered by soonest expiry, followed by pending-payment assignments, scheduled renewals, and history. Active assignments with 5 or fewer days remaining are renewal-eligible."
+            }
+        },
+        "/memberships/{id}/packages": {
+            "get": {
+                "operationId": "MembershipsController_listPackages",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Package options with validity, duration, quota, rate, calculated fee, and active state."
+                    },
+                    "404": {
+                        "description": "Membership plan not found in this club."
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "List package options for a membership plan",
+                "tags": [
+                    "Memberships"
+                ]
+            },
+            "post": {
+                "operationId": "MembershipsController_createPackage",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateMembershipPackageDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created package option. Fee is rate per booking multiplied by included bookings."
+                    },
+                    "400": {
+                        "description": "Invalid values or duration."
+                    },
+                    "409": {
+                        "description": "An active package already exists for this validity and booking duration."
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Create a package option for a membership plan",
+                "tags": [
+                    "Memberships"
+                ]
+            }
+        },
+        "/memberships/packages/{packageId}": {
+            "put": {
+                "operationId": "MembershipsController_updatePackage",
+                "parameters": [
+                    {
+                        "name": "packageId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateMembershipPackageDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated package option."
+                    },
+                    "404": {
+                        "description": "Package not found in this club."
+                    },
+                    "409": {
+                        "description": "Package terms are immutable after assignment or conflict with another active package."
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Update or deactivate a membership package",
+                "tags": [
+                    "Memberships"
+                ]
+            }
+        },
+        "/memberships/{id}/assignments": {
+            "post": {
+                "operationId": "MembershipsController_assignPackage",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssignMembershipPackageDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Assignment created with a fresh quota. Consumer must confirm demo checkout before booking."
+                    },
+                    "404": {
+                        "description": "Consumer, plan, or package not found in this club."
+                    },
+                    "409": {
+                        "description": "Existing current, scheduled, or pending assignment prevents this assignment. Renewals are allowed with five or fewer days remaining."
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Assign a package to a consumer",
+                "tags": [
+                    "Memberships"
+                ]
+            }
+        },
+        "/me/membership/{id}/confirm-demo-payment": {
+            "post": {
+                "operationId": "MeMembershipController_confirmDemoPayment",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Simulated payment recorded with a printable receipt. No payment provider is called and no money is collected."
+                    },
+                    "404": {
+                        "description": "Assignment or payment not found."
+                    },
+                    "409": {
+                        "description": "Assignment is cancelled or its package is unavailable."
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "summary": "Confirm demo payment for an assigned membership package",
+                "tags": [
+                    "Memberships"
+                ]
+            }
         }
     },
     "info": {
         "title": "Club Management API",
-        "description": "Multi-tenant court booking platform.\n\n**Try it:** call `POST /auth/login`, copy the `accessToken`, click **Authorize** and paste it.\n\n- Platform admin: login without `clubSlug`.\n- Club admin and consumers: `clubSlug` + email + password.\n- Times are `HH:mm` in the club timezone. `dayOfWeek`: 0 = Sunday ... 6 = Saturday.\n- Errors always look like `{ statusCode, error, message, errors?, path, timestamp }`.",
+        "description": "Multi-tenant court booking platform.\n\nMembership packages are created and assigned by Club Admins.\n\nConsumer package checkout is simulated only: it does not contact a payment provider or collect money.\n\nSee README.md and docs/progress-log.md for the package lifecycle.",
         "version": "1.0",
         "contact": {}
     },
@@ -2164,6 +2399,98 @@
                 },
                 "required": [
                     "useLocationHours"
+                ]
+            },
+            "CreateMembershipPackageDto": {
+                "type": "object",
+                "properties": {
+                    "validityDays": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 3650,
+                        "example": 30,
+                        "description": "Package validity in days."
+                    },
+                    "bookingDurationMinutes": {
+                        "type": "integer",
+                        "minimum": 5,
+                        "maximum": 480,
+                        "example": 30,
+                        "description": "Duration of each included booking."
+                    },
+                    "includedBookings": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000,
+                        "example": 24,
+                        "description": "Number of bookings included in the package."
+                    },
+                    "pricePerBooking": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 10000000,
+                        "example": 20,
+                        "description": "Numeric rate per booking. Fee is rate multiplied by quota; display currency symbols in the client."
+                    }
+                },
+                "required": [
+                    "validityDays",
+                    "bookingDurationMinutes",
+                    "includedBookings",
+                    "pricePerBooking"
+                ]
+            },
+            "UpdateMembershipPackageDto": {
+                "type": "object",
+                "properties": {
+                    "validityDays": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 3650,
+                        "example": 30
+                    },
+                    "bookingDurationMinutes": {
+                        "type": "integer",
+                        "minimum": 5,
+                        "maximum": 480,
+                        "example": 30
+                    },
+                    "includedBookings": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000,
+                        "example": 24
+                    },
+                    "pricePerBooking": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 10000000,
+                        "example": 20
+                    },
+                    "isActive": {
+                        "type": "boolean",
+                        "example": false,
+                        "description": "Inactive packages cannot be assigned to new consumers. Terms cannot change after assignment."
+                    }
+                }
+            },
+            "AssignMembershipPackageDto": {
+                "type": "object",
+                "properties": {
+                    "userId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Existing consumer registered in this club context."
+                    },
+                    "packageId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Active package option to assign."
+                    }
+                },
+                "required": [
+                    "userId",
+                    "packageId"
                 ]
             }
         }

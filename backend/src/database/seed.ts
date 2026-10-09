@@ -9,8 +9,10 @@ import { Court } from '../courts/entities/court.entity.js';
 import { LocationOpeningHour } from '../locations/entities/location-opening-hour.entity.js';
 import { LocationUnavailablePeriod } from '../locations/entities/location-unavailable-period.entity.js';
 import { Location } from '../locations/entities/location.entity.js';
-import { MembershipPrice } from '../memberships/entities/membership-price.entity.js';
+import { MembershipPayment } from '../memberships/entities/membership-payment.entity.js';
 import { Membership } from '../memberships/entities/membership.entity.js';
+import { MembershipPackage } from '../memberships/entities/membership-package.entity.js';
+import { MembershipPrice } from '../memberships/entities/membership-price.entity.js';
 import { UserMembership } from '../memberships/entities/user-membership.entity.js';
 import { CourtPrice } from '../pricing/entities/court-price.entity.js';
 import { PricingShift } from '../pricing/entities/pricing-shift.entity.js';
@@ -208,6 +210,7 @@ async function seedMembershipClub(m: EntityManager, passwordHash: string) {
   await makeUser(m, clubId, 'Lakeside Admin', 'admin@lakeside.com', UserRole.CLUB_ADMIN, passwordHash);
   const lena = await makeUser(m, clubId, 'Lena Fischer', 'lena@lakeside.com', UserRole.CONSUMER, passwordHash);
   const sam = await makeUser(m, clubId, 'Sam Carter', 'sam@lakeside.com', UserRole.CONSUMER, passwordHash);
+  const amir = await makeUser(m, clubId, 'Amir Rahman', 'amir@lakeside.com', UserRole.CONSUMER, passwordHash);
 
   const lakeside = await m.save(
     m.create(Location, {
@@ -225,35 +228,123 @@ async function seedMembershipClub(m: EntityManager, passwordHash: string) {
   const court1 = await m.save(m.create(Court, { clubId, locationId: lakeside.id, name: 'Court 1' }));
   await m.save(m.create(Court, { clubId, locationId: lakeside.id, name: 'Court 2' }));
 
-  const plans = [
-    { name: 'Basic', description: 'Standard member rates', validityDays: 30, prices: { 30: 10, 60: 18, 90: 25 } },
-    { name: 'Premium', description: 'Discounted rates', validityDays: 90, prices: { 30: 8, 60: 15, 90: 20 } },
-    { name: 'VIP', description: 'Best rates', validityDays: 365, prices: { 30: 5, 60: 10, 90: 15 } },
+  const planSpecs = [
+    {
+      name: 'Basic',
+      description: 'Standard member package options',
+      rates: { 30: 20, 60: 38, 90: 50 },
+    },
+    {
+      name: 'Premium',
+      description: 'Discounted member package options',
+      rates: { 30: 18, 60: 35, 90: 46 },
+    },
+    {
+      name: 'VIP',
+      description: 'Best member package options',
+      rates: { 30: 15, 60: 30, 90: 40 },
+    },
   ];
-  const saved: Record<string, Membership> = {};
-  for (const p of plans) {
+  const plans: Record<string, Membership> = {};
+  const packages: Record<string, Record<number, MembershipPackage>> = {};
+  for (const spec of planSpecs) {
     const plan = await m.save(
-      m.create(Membership, { clubId, name: p.name, description: p.description, validityDays: p.validityDays }),
+      m.create(Membership, {
+        clubId,
+        name: spec.name,
+        description: spec.description,
+        validityDays: 30,
+      }),
     );
+    plans[spec.name] = plan;
+    packages[spec.name] = {};
     await m.insert(
       MembershipPrice,
-      Object.entries(p.prices).map(([duration, price]) => ({
+      Object.entries(spec.rates).map(([duration, price]) => ({
         clubId,
         membershipId: plan.id,
         durationMinutes: Number(duration),
         price,
       })),
     );
-    saved[p.name] = plan;
+    for (const [duration, pricePerBooking] of Object.entries(spec.rates)) {
+      const option = await m.save(
+        m.create(MembershipPackage, {
+          clubId,
+          membershipId: plan.id,
+          validityDays: 30,
+          bookingDurationMinutes: Number(duration),
+          includedBookings: 24,
+          pricePerBooking,
+        }),
+      );
+      packages[spec.name][Number(duration)] = option;
+    }
   }
 
-  const now = Date.now();
-  await m.insert(UserMembership, [
-    // Lena: active Premium
-    { clubId, userId: lena.id, membershipId: saved.Premium.id, startsAt: new Date(now), expiresAt: new Date(now + 90 * DAY_MS) },
-    // Sam: an EXPIRED Basic, so he has no usable membership (shows the expiry rule)
-    { clubId, userId: sam.id, membershipId: saved.Basic.id, startsAt: new Date(now - 40 * DAY_MS), expiresAt: new Date(now - 10 * DAY_MS) },
-  ]);
+  const now = new Date();
+  const createAssignment = async (
+    user: User,
+    plan: Membership,
+    packageOption: MembershipPackage,
+    startsAt: Date,
+    expiresAt: Date,
+    paidAt: Date | null,
+  ) => {
+    const packageFee = Math.round(packageOption.pricePerBooking * packageOption.includedBookings * 100) / 100;
+    const assignment = await m.save(
+      m.create(UserMembership, {
+        clubId,
+        userId: user.id,
+        membershipId: plan.id,
+        packageId: packageOption.id,
+        packageFee,
+        startsAt,
+        expiresAt,
+        paidAt,
+      }),
+    );
+    await m.save(
+      m.create(MembershipPayment, {
+        clubId,
+        userId: user.id,
+        userMembershipId: assignment.id,
+        amount: packageFee,
+        status: paidAt ? 'SIMULATED_PAID' : 'PENDING',
+        method: paidAt ? 'DEMO' : null,
+        paidAt,
+      }),
+    );
+    return assignment;
+  };
+
+  // Lena: active Premium package with a demo receipt and remaining credits.
+  const lenaAssignment = await createAssignment(
+    lena,
+    plans.Premium,
+    packages.Premium[60],
+    now,
+    new Date(now.getTime() + 30 * DAY_MS),
+    now,
+  );
+  // Sam: expired Basic package, retained as membership history.
+  await createAssignment(
+    sam,
+    plans.Basic,
+    packages.Basic[30],
+    new Date(now.getTime() - 40 * DAY_MS),
+    new Date(now.getTime() - 10 * DAY_MS),
+    new Date(now.getTime() - 40 * DAY_MS),
+  );
+  // Amir: an assigned package awaiting the consumer's demo checkout.
+  await createAssignment(
+    amir,
+    plans.VIP,
+    packages.VIP[30],
+    now,
+    new Date(now.getTime() + 30 * DAY_MS),
+    null,
+  );
 
   const today = nowInTimezone(timezone).date;
   const booking = (date: string, start: string, minutes: number, price: number) => ({
@@ -261,17 +352,21 @@ async function seedMembershipClub(m: EntityManager, passwordHash: string) {
     locationId: lakeside.id,
     courtId: court1.id,
     userId: lena.id,
+    userMembershipId: lenaAssignment.id,
     date,
     startMinute: t(start),
     endMinute: t(start) + minutes,
     durationMinutes: minutes,
     price,
     pricingModel: PricingModel.MEMBERSHIP_BASED,
-    membershipId: saved.Premium.id,
+    membershipId: plans.Premium.id,
     membershipName: 'Premium',
     status: BookingStatus.CONFIRMED,
   });
-  await m.insert(Booking, [booking(addDays(today, 2), '18:00', 60, 15), booking(addDays(today, 3), '07:00', 30, 8)]);
+  await m.insert(Booking, [
+    booking(addDays(today, 2), '18:00', 60, packages.Premium[60].pricePerBooking),
+    booking(addDays(today, 3), '07:00', 60, packages.Premium[60].pricePerBooking),
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -317,7 +412,9 @@ Seed finished. Every demo account uses the password: ${DEMO_PASSWORD}
 
   lakeside-racquet (MEMBERSHIP_BASED, Asia/Dubai)
     club admin     admin@lakeside.com
-    consumers      lena@lakeside.com (active Premium), sam@lakeside.com (expired Basic)
+    consumers      lena@lakeside.com (active Premium, demo receipt),
+                   sam@lakeside.com (expired Basic history),
+                   amir@lakeside.com (assigned VIP, awaiting demo checkout)
 `);
   } finally {
     await dataSource.destroy();
