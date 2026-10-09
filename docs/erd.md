@@ -12,11 +12,11 @@ erDiagram
     courts ||--o{ court_opening_hours : "custom hours"
     locations ||--o{ pricing_shifts : has
     courts ||--o{ court_prices : has
-    pricing_shifts |o--o{ court_prices : "NULL = Normal"
+    pricing_shifts |o--o{ court_prices : "NULL shift means Normal price"
     memberships ||--o{ membership_prices : has
     memberships ||--o{ membership_packages : offers
     users ||--o{ user_memberships : holds
-    memberships ||--o{ user_memberships : "plan"
+    memberships ||--o{ user_memberships : plan
     membership_packages |o--o{ user_memberships : assigned
     user_memberships ||--o| membership_payments : receipt
     user_memberships |o--o{ bookings : consumes
@@ -29,35 +29,43 @@ erDiagram
         uuid id PK
         string name
         string slug UK
-        enum pricingModel "SHIFT_BASED or MEMBERSHIP_BASED, never changes"
+        enum pricingModel "SHIFT_BASED or MEMBERSHIP_BASED; immutable application rule"
         boolean isActive
         string timezone
+        timestamp createdAt
+        timestamp updatedAt
     }
     users {
         uuid id PK
-        uuid clubId FK "NULL only for PLATFORM_ADMIN"
+        uuid clubId FK "NULL for PLATFORM_ADMIN"
+        string name
         string email "unique per club"
         string passwordHash "bcrypt"
         enum role "PLATFORM_ADMIN, CLUB_ADMIN, CONSUMER"
-        string refreshTokenHash "SHA-256"
         boolean isActive
+        string refreshTokenHash "SHA-256"
+        timestamp createdAt
+        timestamp updatedAt
     }
     locations {
         uuid id PK
         uuid clubId FK
-        string name "unique per club"
+        string name "unique per club while not soft-deleted"
         string address
-        intarray durations "allowed booking minutes"
+        text details "nullable"
+        integer_array durations "allowed booking minutes"
         boolean isActive
-        timestamptz deletedAt "soft delete"
+        timestamp createdAt
+        timestamp updatedAt
+        timestamp deletedAt "soft delete"
     }
     location_opening_hours {
         uuid id PK
         uuid clubId "tenant key"
         uuid locationId FK
-        smallint dayOfWeek "0=Sunday"
-        smallint startMinute
-        smallint endMinute
+        smallint dayOfWeek "0=Sunday through 6=Saturday"
+        smallint startMinute "minutes after midnight"
+        smallint endMinute "minutes after midnight; 1440=end of day"
     }
     location_unavailable_periods {
         uuid id PK
@@ -66,23 +74,27 @@ erDiagram
         date date
         smallint startMinute
         smallint endMinute
-        string reason
+        string reason "nullable"
+        timestamp createdAt
     }
     courts {
         uuid id PK
         uuid clubId "tenant key"
         uuid locationId FK
-        string name "unique per location"
-        intarray durations "NULL = all of the location"
+        string name "unique per location while not soft-deleted"
+        text description "nullable"
+        integer_array durations "NULL means all location durations"
         boolean useCustomHours
         boolean isActive
-        timestamptz deletedAt "soft delete"
+        timestamp createdAt
+        timestamp updatedAt
+        timestamp deletedAt "soft delete"
     }
     court_opening_hours {
         uuid id PK
         uuid clubId "tenant key"
         uuid courtId FK
-        smallint dayOfWeek
+        smallint dayOfWeek "0=Sunday through 6=Saturday"
         smallint startMinute
         smallint endMinute
     }
@@ -93,51 +105,59 @@ erDiagram
         string name "unique per location"
         smallint startMinute
         smallint endMinute
+        timestamp createdAt
+        timestamp updatedAt
     }
     court_prices {
         uuid id PK
         uuid clubId "tenant key"
         uuid courtId FK
-        uuid shiftId FK "NULL = Normal price"
-        int durationMinutes
+        uuid shiftId FK "NULL means Normal price"
+        integer durationMinutes
         numeric price
     }
     memberships {
         uuid id PK
         uuid clubId "tenant key"
-        string name "unique per club"
-        int validityDays
+        string name "unique per club while not soft-deleted"
+        text description "nullable"
+        integer validityDays
         boolean isActive
-        timestamptz deletedAt "soft delete"
+        timestamp createdAt
+        timestamp updatedAt
+        timestamp deletedAt "soft delete"
     }
     membership_prices {
         uuid id PK
         uuid clubId "tenant key"
         uuid membershipId FK
-        int durationMinutes
+        integer durationMinutes
         numeric price
     }
     membership_packages {
         uuid id PK
         uuid clubId "tenant key"
         uuid membershipId FK
-        int validityDays
-        int bookingDurationMinutes
-        int includedBookings
+        integer validityDays
+        integer bookingDurationMinutes
+        integer includedBookings
         numeric pricePerBooking
         boolean isActive
+        timestamp createdAt
+        timestamp updatedAt
     }
     user_memberships {
         uuid id PK
         uuid clubId "tenant key"
         uuid userId FK
         uuid membershipId FK
-        uuid packageId FK "nullable for legacy rows"
-        numeric packageFee "snapshot"
-        timestamptz paidAt "NULL until demo checkout confirmation"
-        timestamptz startsAt
-        timestamptz expiresAt
-        timestamptz cancelledAt
+        uuid packageId FK "nullable for legacy assignments"
+        numeric packageFee "nullable assignment-time snapshot"
+        timestamp paidAt "NULL until demo checkout confirmation"
+        timestamp startsAt
+        timestamp expiresAt
+        timestamp cancelledAt "nullable"
+        timestamp createdAt
     }
     membership_payments {
         uuid id PK
@@ -147,7 +167,9 @@ erDiagram
         numeric amount
         string status "PENDING or SIMULATED_PAID"
         string method "DEMO or NULL"
-        timestamptz paidAt
+        timestamp paidAt "nullable"
+        timestamp createdAt
+        timestamp updatedAt
     }
     bookings {
         uuid id PK
@@ -155,35 +177,45 @@ erDiagram
         uuid locationId FK
         uuid courtId FK
         uuid userId FK
-        uuid userMembershipId FK "nullable for shift bookings"
+        uuid userMembershipId FK "nullable for non-membership bookings"
         date date "club timezone"
         smallint startMinute
         smallint endMinute
-        numeric price "snapshot"
+        integer durationMinutes
+        numeric price "booking-time snapshot"
+        enum pricingModel "SHIFT_BASED or MEMBERSHIP_BASED"
+        uuid membershipId "nullable pricing snapshot; not an FK"
+        string membershipName "nullable pricing snapshot"
         enum status "CONFIRMED or CANCELLED"
-        string membershipName "snapshot"
+        timestamp cancelledAt "nullable"
+        timestamp createdAt
     }
 ```
 
 ## Tenant isolation strategy
-- One shared database. Every tenant-owned table has a `clubId` column.
-- `users.clubId`, `locations.clubId` are real foreign keys to `tenants`. On the other tables `clubId` is a denormalised, indexed tenant key that the service layer always fills from the verified parent row.
-- `clubId` is read from the logged-in user's token (`@ClubId()`), never from the request. Every query filters by it; another club's id returns 404.
-- Unique constraints are scoped by club (for example email per club, location name per club).
+
+- One shared PostgreSQL database. Each tenant-owned table has a `clubId` column.
+- `users.clubId` and `locations.clubId` have foreign keys to `tenants`. Most other `clubId` columns are denormalized tenant keys; their parent foreign keys are shown in the diagram.
+- `clubId` is resolved from the authenticated user's club context, never accepted as a trusted request value. Service queries scope records by that value.
+- Unique constraints are club-scoped where applicable. For example, consumer/admin email addresses may repeat across clubs, and location names may repeat after a soft-deleted location is removed from active use.
 
 ## Important indexes and constraints
+
 | Table | Index / constraint | Purpose |
 |---|---|---|
-| users | UNIQUE (clubId, email) | same email allowed in different clubs |
-| locations | UNIQUE (clubId, name) WHERE deletedAt IS NULL | name unique per club, soft deletes ignored |
-| courts | UNIQUE (clubId, locationId, name) WHERE deletedAt IS NULL | name unique per location |
-| location_opening_hours, court_opening_hours | INDEX (clubId, parentId, dayOfWeek); CHECK day 0-6 and 0 <= start < end <= 1440 | fast day lookup, valid ranges |
-| pricing_shifts | UNIQUE (clubId, locationId, name); CHECK range | no duplicate names |
-| court_prices | UNIQUE (courtId, durationMinutes, shiftId) WHERE shiftId IS NOT NULL; UNIQUE (courtId, durationMinutes) WHERE shiftId IS NULL; CHECK price >= 0 | one price per duration and shift (two indexes because NULLs are distinct) |
-| membership_prices | UNIQUE (membershipId, durationMinutes) | one price per duration |
-| membership_packages | UNIQUE (membershipId, validityDays, bookingDurationMinutes) WHERE isActive = true; INDEX (clubId, membershipId) | one assignable option for each active package shape |
-| user_memberships | INDEX (clubId, userId); INDEX (packageId) | find club member assignments and package history |
-| membership_payments | UNIQUE (userMembershipId); INDEX (clubId, userId, createdAt); CHECK amount >= 0 and valid payment state | one demo receipt per assignment and member payment history |
-| bookings | EXCLUDE USING gist (courtId =, date =, int4range(startMinute, endMinute) &&) WHERE status = 'CONFIRMED' | the database itself rejects overlapping bookings |
-| bookings | partial INDEX (courtId, date) WHERE status = 'CONFIRMED'; INDEX (clubId, locationId, date); INDEX (clubId, userId, date) | availability and "my bookings" queries |
-| bookings | INDEX (userMembershipId) | count confirmed bookings against the exact package quota |
+| users | UNIQUE (`clubId`, `email`) | Keep an email unique within a club. PostgreSQL permits multiple `NULL` club IDs, so platform-admin uniqueness is enforced by application logic if required. |
+| locations | UNIQUE (`clubId`, `name`) WHERE `deletedAt IS NULL` | Allow name reuse after soft deletion. |
+| courts | UNIQUE (`clubId`, `locationId`, `name`) WHERE `deletedAt IS NULL` | Allow court-name reuse after soft deletion. |
+| location_opening_hours, court_opening_hours | INDEX (`clubId`, parent ID, `dayOfWeek`); CHECK weekday 0–6 and `0 <= startMinute < endMinute <= 1440` | Fast weekly schedule lookup and valid time ranges. |
+| location_unavailable_periods | INDEX (`clubId`, `locationId`, `date`); CHECK valid time range | Find closures for a location and date. |
+| pricing_shifts | UNIQUE (`clubId`, `locationId`, `name`); CHECK valid time range | Prevent duplicate shift names at a location and invalid ranges. |
+| court_prices | UNIQUE (`courtId`, `durationMinutes`, `shiftId`) WHERE `shiftId IS NOT NULL`; UNIQUE (`courtId`, `durationMinutes`) WHERE `shiftId IS NULL`; INDEX (`clubId`, `courtId`); CHECK price >= 0 and duration > 0 | Enforce one price per duration and shift, including the Normal price where `shiftId` is NULL. |
+| memberships | UNIQUE (`clubId`, `name`) WHERE `deletedAt IS NULL`; CHECK `validityDays > 0` | Preserve history while allowing a soft-deleted name to be reused. |
+| membership_prices | UNIQUE (`membershipId`, `durationMinutes`); INDEX (`clubId`, `membershipId`); CHECK price >= 0 and duration > 0 | Store at most one legacy price per membership duration. |
+| membership_packages | UNIQUE (`membershipId`, `validityDays`, `bookingDurationMinutes`) WHERE `isActive = true`; INDEX (`clubId`, `membershipId`); CHECK positive validity, duration, and quota, and nonnegative rate | Keep one assignable package shape active while retaining deactivated offers and their assignment history. |
+| user_memberships | INDEX (`clubId`, `userId`); INDEX (`clubId`, `membershipId`); INDEX (`packageId`); CHECK `expiresAt > startsAt` and nullable package fee >= 0 | Find member assignments and preserve the package used for each assignment. |
+| membership_payments | UNIQUE (`userMembershipId`); INDEX (`clubId`, `userId`, `createdAt`); CHECK nonnegative amount and consistent demo-payment state | Keep one receipt per assignment and support member payment history. |
+| bookings | EXCLUDE USING GiST (`courtId`, `date`, `int4range(startMinute, endMinute)`) WHERE `status = 'CONFIRMED'`; CHECK valid range, duration matches range, and price >= 0 | Reject overlapping confirmed bookings in the database and enforce valid booking snapshots. |
+| bookings | Partial INDEX (`courtId`, `date`) WHERE `status = 'CONFIRMED'`; INDEX (`clubId`, `locationId`, `date`); INDEX (`clubId`, `userId`, `date`); INDEX (`userMembershipId`) | Support availability, club booking views, consumer history, and membership quota counting. |
+
+The single migration source currently keeps the historical migration classes in sequence in `backend/src/database/migrations/1791442532556-InitialSchema.ts`; the ERD describes the resulting schema after all of those migrations have run.
