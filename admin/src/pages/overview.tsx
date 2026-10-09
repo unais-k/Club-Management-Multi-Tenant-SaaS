@@ -114,7 +114,7 @@ export function OverviewPage() {
           {
             label: "Membership plans",
             value: memberships.length,
-            detail: `${memberships.filter((item) => item.isActive && item.prices.length > 0).length} active and priced`,
+            detail: `${memberships.filter((item) => item.isActive).length} active`,
           },
         ]);
         setRows(

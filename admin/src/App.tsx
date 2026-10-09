@@ -85,7 +85,8 @@ const pageCopy: Record<string, { title: string; description: string }> = {
   },
   "/memberships": {
     title: "Memberships",
-    description: "Manage membership plans and duration-based prices.",
+    description:
+      "Manage membership packages, consumer assignments, and renewals.",
   },
   "/availability": {
     title: "Availability",
