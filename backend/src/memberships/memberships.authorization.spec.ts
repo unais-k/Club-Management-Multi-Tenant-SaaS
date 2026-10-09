@@ -1,25 +1,32 @@
-import { NotFoundException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { MembershipsService } from './memberships.service.js';
+import { UserRole } from '../common/enums/index.js';
 
-describe('MembershipsService object authorization', () => {
-  it('scopes membership cancellation to the authenticated user and club', async () => {
-    const userMembershipRepo = { findOneBy: vi.fn().mockResolvedValue(null) };
+describe('MembershipsService club scoping', () => {
+  it('only searches active consumer accounts in the admin club', async () => {
+    const userRepo = { find: vi.fn().mockResolvedValue([]) };
     const service = new MembershipsService(
       {} as never,
-      userMembershipRepo as never,
+      {} as never,
+      {} as never,
+      userRepo as never,
       {} as never,
       {} as never,
       {} as never,
     );
 
-    await expect(service.cancelMine('club-a', 'user-a', 'subscription-b'))
-      .rejects.toBeInstanceOf(NotFoundException);
+    await service.searchClubConsumers('club-a', { search: 'aisha' });
 
-    expect(userMembershipRepo.findOneBy).toHaveBeenCalledWith({
-      id: 'subscription-b',
-      clubId: 'club-a',
-      userId: 'user-a',
-    });
+    const options = userRepo.find.mock.calls[0][0];
+    expect(options.where).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          clubId: 'club-a',
+          role: UserRole.CONSUMER,
+          isActive: true,
+        }),
+      ]),
+    );
+    expect(options.take).toBe(25);
   });
 });

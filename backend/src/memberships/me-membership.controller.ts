@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ClubId } from '../common/decorators/club-id.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
@@ -15,19 +15,13 @@ export class MeMembershipController {
   constructor(private readonly membershipsService: MembershipsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'My current membership, all active ones, and history' })
+  @ApiOperation({
+    summary: 'Get my current and scheduled memberships plus history',
+    description:
+      'Membership packages are assigned by the Club Admin. Consumers cannot self-subscribe or cancel an assignment.',
+  })
   mine(@ClubId() clubId: string, @CurrentUser() user: AuthUser) {
     return this.membershipsService.myMemberships(clubId, user.id);
   }
 
-  @Delete(':id')
-  @HttpCode(204)
-  @ApiOperation({ summary: 'Cancel one of my memberships (ends immediately)' })
-  cancel(
-    @ClubId() clubId: string,
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
-    return this.membershipsService.cancelMine(clubId, user.id, id);
-  }
 }

@@ -20,7 +20,7 @@ import { UserMembership } from './user-membership.entity.js';
 @Index(
   'UQ_membership_package_option',
   ['membershipId', 'validityDays', 'bookingDurationMinutes'],
-  { unique: true },
+  { unique: true, where: '"isActive" = true' },
 )
 @Index('IDX_membership_packages_club_plan', ['clubId', 'membershipId'])
 @Check('CHK_membership_package_validity', '"validityDays" > 0')
@@ -59,6 +59,9 @@ export class MembershipPackage {
     transformer: decimalTransformer,
   })
   pricePerBooking: number;
+
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
 
   @OneToMany(() => UserMembership, (userMembership) => userMembership.package)
   assignments: Relation<UserMembership[]>;
