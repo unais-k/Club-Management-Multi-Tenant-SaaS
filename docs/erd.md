@@ -163,7 +163,7 @@ erDiagram
         uuid id PK
         uuid clubId "tenant key"
         uuid userId FK
-        uuid userMembershipId FK UK
+        uuid userMembershipId FK, UK
         numeric amount
         string status "PENDING or SIMULATED_PAID"
         string method "DEMO or NULL"
