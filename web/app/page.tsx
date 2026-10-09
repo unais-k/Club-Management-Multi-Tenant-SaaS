@@ -91,7 +91,11 @@ export default function Home() {
             method: "POST",
             body: JSON.stringify({ refreshToken: saved.refreshToken }),
           });
-          setSession(refreshed.accessToken, refreshed.refreshToken, refreshed.user);
+          setSession(
+            refreshed.accessToken,
+            refreshed.refreshToken,
+            refreshed.user,
+          );
           currentUser = await request<Profile>("/auth/me", {
             headers: { Authorization: `Bearer ${refreshed.accessToken}` },
           });
@@ -105,7 +109,9 @@ export default function Home() {
     }
 
     void restoreSession();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [clearSession, setSession]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -164,7 +170,11 @@ export default function Home() {
   }
 
   if (restoringSession) {
-    return <main className="flex min-h-screen items-center justify-center bg-[#f6f8f5] text-sm text-[#738077]">Restoring your session…</main>;
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f6f8f5] text-sm text-[#738077]">
+        Restoring your session…
+      </main>
+    );
   }
 
   return (

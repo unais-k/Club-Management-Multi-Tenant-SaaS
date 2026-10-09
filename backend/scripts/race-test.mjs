@@ -1,9 +1,27 @@
 // Usage (from /backend):
 // node scripts/race-test.mjs <baseUrl> <clubSlug> <email> <password> <courtId> <date> <startTime> <duration> [count]
-const [base, clubSlug, email, password, courtId, date, startTime, duration, count = '10'] =
-  process.argv.slice(2);
+const [
+  base,
+  clubSlug,
+  email,
+  password,
+  courtId,
+  date,
+  startTime,
+  duration,
+  count = '10',
+] = process.argv.slice(2);
 
-if (!base || !clubSlug || !email || !password || !courtId || !date || !startTime || !duration) {
+if (
+  !base ||
+  !clubSlug ||
+  !email ||
+  !password ||
+  !courtId ||
+  !date ||
+  !startTime ||
+  !duration
+) {
   console.log(
     'Usage: node scripts/race-test.mjs <baseUrl> <clubSlug> <email> <password> <courtId> <date> <startTime> <duration> [count]',
   );
@@ -44,5 +62,7 @@ for (const r of results) tally[r.status] = (tally[r.status] ?? 0) + 1;
 console.log(`Sent ${count} identical requests at once`);
 console.log('Status counts:', tally);
 console.log('Other messages:', [
-  ...new Set(results.filter((r) => r.status !== 201).map((r) => r.body?.message)),
+  ...new Set(
+    results.filter((r) => r.status !== 201).map((r) => r.body?.message),
+  ),
 ]);

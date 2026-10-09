@@ -76,16 +76,14 @@ export function OverviewPage() {
           },
         ]);
         setRows(
-          result.data
-            .slice(0, 8)
-            .map((tenant) => ({
-              name: tenant.name,
-              detail:
-                tenant.pricingModel === "SHIFT_BASED"
-                  ? "Shift based pricing"
-                  : "Membership based pricing",
-              active: tenant.isActive,
-            })),
+          result.data.slice(0, 8).map((tenant) => ({
+            name: tenant.name,
+            detail:
+              tenant.pricingModel === "SHIFT_BASED"
+                ? "Shift based pricing"
+                : "Membership based pricing",
+            active: tenant.isActive,
+          })),
         );
       } else {
         const locationResult = await apiRequest<Page<Location>>(
@@ -120,13 +118,11 @@ export function OverviewPage() {
           },
         ]);
         setRows(
-          locationRows
-            .slice(0, 8)
-            .map((location) => ({
-              name: location.name,
-              detail: `${location.openingHours.length} weekly opening windows`,
-              active: location.isActive,
-            })),
+          locationRows.slice(0, 8).map((location) => ({
+            name: location.name,
+            detail: `${location.openingHours.length} weekly opening windows`,
+            active: location.isActive,
+          })),
         );
       }
     } catch (err) {

@@ -11,6 +11,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { MembershipPrice } from './membership-price.entity.js';
+import { MembershipPackage } from './membership-package.entity.js';
 
 // Plan name must be unique per club (ignoring soft-deleted plans)
 @Entity('memberships')
@@ -38,6 +39,12 @@ export class Membership {
 
   @OneToMany(() => MembershipPrice, (p) => p.membership)
   prices: Relation<MembershipPrice[]>;
+
+  @OneToMany(
+    () => MembershipPackage,
+    (membershipPackage) => membershipPackage.membership,
+  )
+  packages: Relation<MembershipPackage[]>;
 
   @CreateDateColumn()
   createdAt: Date;

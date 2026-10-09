@@ -11,6 +11,8 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity.js';
 import { Membership } from './membership.entity.js';
+import { MembershipPackage } from './membership-package.entity.js';
+import { decimalTransformer } from '../../common/helpers/decimal.transformer.js';
 
 // One row = one subscription of a consumer to a plan
 @Entity('user_memberships')
@@ -37,6 +39,28 @@ export class UserMembership {
   @ManyToOne(() => Membership, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'membershipId' })
   membership: Relation<Membership>;
+
+  // Nullable during the staged migration so existing subscriptions remain readable.
+  @Column({ type: 'uuid', nullable: true })
+  packageId: string | null;
+
+  @ManyToOne(
+    () => MembershipPackage,
+    (membershipPackage) => membershipPackage.assignments,
+    { nullable: true, onDelete: 'RESTRICT' },
+  )
+  @JoinColumn({ name: 'packageId' })
+  package: Relation<MembershipPackage> | null;
+
+  // Snapshot the package charge when this assignment is created.
+  @Column({
+    type: 'numeric',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    transformer: decimalTransformer,
+  })
+  packageFee: number | null;
 
   @Column({ type: 'timestamptz' })
   startsAt: Date;

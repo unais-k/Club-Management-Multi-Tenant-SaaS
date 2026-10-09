@@ -15,6 +15,7 @@ import { decimalTransformer } from '../../common/helpers/decimal.transformer.js'
 import { Court } from '../../courts/entities/court.entity.js';
 import { Location } from '../../locations/entities/location.entity.js';
 import { User } from '../../users/entities/user.entity.js';
+import { UserMembership } from '../../memberships/entities/user-membership.entity.js';
 
 @Entity('bookings')
 @Exclusion(
@@ -29,7 +30,10 @@ import { User } from '../../users/entities/user.entity.js';
   'CHK_booking_range',
   '"startMinute" >= 0 AND "endMinute" <= 1440 AND "endMinute" > "startMinute"',
 )
-@Check('CHK_booking_duration', '"durationMinutes" = "endMinute" - "startMinute"')
+@Check(
+  'CHK_booking_duration',
+  '"durationMinutes" = "endMinute" - "startMinute"',
+)
 @Check('CHK_booking_price', '"price" >= 0')
 export class Booking {
   @PrimaryGeneratedColumn('uuid')
@@ -59,6 +63,14 @@ export class Booking {
   @JoinColumn({ name: 'userId' })
   user: Relation<User>;
 
+  // Identifies the exact membership assignment whose quota this booking uses.
+  @Column({ type: 'uuid', nullable: true })
+  userMembershipId: string | null;
+
+  @ManyToOne(() => UserMembership, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'userMembershipId' })
+  userMembership: Relation<UserMembership> | null;
+
   // 'YYYY-MM-DD' in the club's timezone
   @Column({ type: 'date' })
   date: string;
@@ -73,7 +85,12 @@ export class Booking {
   durationMinutes: number;
 
   // Snapshot: later price changes never affect existing bookings
-  @Column({ type: 'numeric', precision: 10, scale: 2, transformer: decimalTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 10,
+    scale: 2,
+    transformer: decimalTransformer,
+  })
   price: number;
 
   @Column({ type: 'enum', enum: PricingModel })
@@ -86,7 +103,11 @@ export class Booking {
   @Column({ type: 'varchar', length: 100, nullable: true })
   membershipName: string | null;
 
-  @Column({ type: 'enum', enum: BookingStatus, default: BookingStatus.CONFIRMED })
+  @Column({
+    type: 'enum',
+    enum: BookingStatus,
+    default: BookingStatus.CONFIRMED,
+  })
   status: BookingStatus;
 
   @Column({ type: 'timestamptz', nullable: true })

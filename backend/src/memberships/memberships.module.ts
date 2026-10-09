@@ -5,6 +5,7 @@ import { Tenant } from '../tenants/entities/tenant.entity.js';
 import { User } from '../users/entities/user.entity.js';
 import { MembershipPrice } from './entities/membership-price.entity.js';
 import { Membership } from './entities/membership.entity.js';
+import { MembershipPackage } from './entities/membership-package.entity.js';
 import { UserMembership } from './entities/user-membership.entity.js';
 import { MeMembershipController } from './me-membership.controller.js';
 import { MembershipsController } from './memberships.controller.js';
@@ -14,6 +15,7 @@ import { MembershipsService } from './memberships.service.js';
   imports: [
     TypeOrmModule.forFeature([
       Membership,
+      MembershipPackage,
       MembershipPrice,
       UserMembership,
       Tenant,
@@ -25,4 +27,4 @@ import { MembershipsService } from './memberships.service.js';
   providers: [MembershipsService],
   exports: [MembershipsService, TypeOrmModule],
 })
-export class MembershipsModule {}
+export class MembershipsModule { }
