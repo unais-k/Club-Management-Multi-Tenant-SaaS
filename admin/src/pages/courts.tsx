@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type SyntheticEvent } from "react";
+import { useEffect, useState, type SyntheticEvent } from "react";
 import { Clock3, Grid2X2, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,15 +36,6 @@ const days = [
   "Friday",
   "Saturday",
 ];
-const durationList = (value: string) =>
-  [
-    ...new Set(
-      value
-        .split(",")
-        .map(Number)
-        .filter((item) => Number.isInteger(item) && item >= 5 && item <= 480),
-    ),
-  ].sort((a, b) => a - b);
 type HoursDraft = Hours & { enabled: boolean };
 const hoursForCourt = (court: Court): HoursDraft[] =>
   Array.from({ length: 7 }, (_, dayOfWeek) => {
@@ -67,9 +58,10 @@ export function CourtsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [durationMode, setDurationMode] = useState("all");
-  const [durations, setDurations] = useState("");
-  const [durationDrafts, setDurationDrafts] = useState<Record<string, string>>(
+  const [selectedDurations, setSelectedDurations] = useState<number[] | null>(
+    null,
+  );
+  const [durationDrafts, setDurationDrafts] = useState<Record<string, number[]>>(
     {},
   );
   const [hoursDrafts, setHoursDrafts] = useState<Record<string, HoursDraft[]>>(
@@ -77,7 +69,49 @@ export function CourtsPage() {
   );
   const location =
     locations.find((item) => item.id === locationId) ?? locations[0];
-  const selectedDurations = useMemo(() => durationList(durations), [durations]);
+
+  function locationDurationsForCourt(court: Court) {
+    return locations.find((item) => item.id === court.locationId)?.durations ?? [];
+  }
+
+  function durationsForCourt(court: Court) {
+    return durationDrafts[court.id] ?? court.durations;
+  }
+
+  function allCourtDurationsSelected(court: Court) {
+    const available = locationDurationsForCourt(court);
+    const selected = durationsForCourt(court);
+    return (
+      available.length > 0 &&
+      available.every((duration) => selected.includes(duration))
+    );
+  }
+
+  function toggleCourtDuration(court: Court, duration: number) {
+    const selected = durationsForCourt(court);
+    const next = selected.includes(duration)
+      ? selected.filter((item) => item !== duration)
+      : [...selected, duration].sort((a, b) => a - b);
+    setDurationDrafts((drafts) => ({ ...drafts, [court.id]: next }));
+  }
+  const allDurationsSelected =
+    selectedDurations === null ||
+    Boolean(
+      location?.durations.length &&
+        location.durations.every((duration) =>
+        selectedDurations.includes(duration),
+        ),
+    );
+
+  function toggleDuration(duration: number) {
+    const current = selectedDurations ?? location?.durations ?? [];
+    const next = current.includes(duration)
+      ? current.filter((item) => item !== duration)
+      : [...current, duration].sort((a, b) => a - b);
+    setSelectedDurations(
+      location && next.length === location.durations.length ? null : next,
+    );
+  }
 
   async function loadLocations() {
     setLoading(true);
@@ -131,15 +165,14 @@ export function CourtsPage() {
         body: JSON.stringify({
           name,
           description,
-          durations: durationMode === "all" ? undefined : selectedDurations,
+          durations: selectedDurations ?? undefined,
         }),
       });
       await loadCourts(location.id);
       setCreateOpen(false);
       setName("");
       setDescription("");
-      setDurations("");
-      setDurationMode("all");
+      setSelectedDurations(null);
       setNotice("Court created.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create court");
@@ -149,15 +182,16 @@ export function CourtsPage() {
   }
 
   async function updateCourt(court: Court, changes: Partial<Court>) {
-    const draft = durationDrafts[court.id];
-    const nextDurations =
-      changes.durations ??
-      (draft === undefined ? court.durations : durationList(draft));
+    const nextDurations = changes.durations ?? durationsForCourt(court);
     if (!nextDurations.length) {
       setNotice("");
-      setError("Enter at least one valid duration (5–480 minutes).");
+      setError("Select at least one booking duration for the court.");
       return;
     }
+    const locationDurations = locationDurationsForCourt(court);
+    const usesAllLocationDurations =
+      nextDurations.length === locationDurations.length &&
+      locationDurations.every((duration) => nextDurations.includes(duration));
     setBusy(true);
     setError("");
     setNotice("");
@@ -167,7 +201,7 @@ export function CourtsPage() {
         body: JSON.stringify({
           name: changes.name ?? court.name,
           description: changes.description ?? court.description ?? "",
-          durations: nextDurations,
+          durations: usesAllLocationDurations ? null : nextDurations,
           isActive: changes.isActive ?? court.isActive,
         }),
       });
@@ -272,7 +306,10 @@ export function CourtsPage() {
             <select
               className={selectClass}
               value={location?.id ?? ""}
-              onChange={(event) => setLocationId(event.target.value)}
+              onChange={(event) => {
+                setLocationId(event.target.value);
+                setSelectedDurations(null);
+              }}
             >
               {locations.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -314,29 +351,44 @@ export function CourtsPage() {
                 placeholder="Optional details"
               />
             </Field>
-            <Field label="Booking durations">
-              <select
-                className={selectClass}
-                value={durationMode}
-                onChange={(event) => setDurationMode(event.target.value)}
-              >
-                <option value="all">Use all location durations</option>
-                <option value="custom">Choose a subset</option>
-              </select>
-            </Field>
-            {durationMode === "custom" && (
-              <Field
-                label="Selected durations (minutes)"
-                hint={`Location offers ${location.durations.join(", ")} minutes`}
-              >
-                <input
-                  required
-                  className={inputClass}
-                  value={durations}
-                  onChange={(event) => setDurations(event.target.value)}
-                />
-              </Field>
-            )}
+            <fieldset className="space-y-2 sm:col-span-2">
+              <legend className="mb-2 text-xs font-medium">
+                Booking durations
+              </legend>
+              <div className="flex flex-wrap gap-3">
+                <label className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={allDurationsSelected}
+                    onChange={(event) =>
+                      setSelectedDurations(event.target.checked ? null : [])
+                    }
+                  />
+                  All
+                </label>
+                {location.durations.map((duration) => (
+                  <label
+                    key={duration}
+                    className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        selectedDurations === null ||
+                        selectedDurations.includes(duration)
+                      }
+                      onChange={() => toggleDuration(duration)}
+                    />
+                    {duration} min
+                  </label>
+                ))}
+              </div>
+              {!location.durations.length && (
+                <p className="text-xs text-muted-foreground">
+                  Add durations to this location before creating a court.
+                </p>
+              )}
+            </fieldset>
             <div className="flex justify-end gap-2 sm:col-span-2">
               <Button
                 type="button"
@@ -348,7 +400,8 @@ export function CourtsPage() {
               <Button
                 disabled={
                   busy ||
-                  (durationMode === "custom" && !selectedDurations.length)
+                  !location.durations.length ||
+                  (selectedDurations !== null && !selectedDurations.length)
                 }
               >
                 {busy ? "Saving…" : "Create court"}
@@ -413,20 +466,50 @@ export function CourtsPage() {
                     }
                   />
                 </Field>
-                <Field label="Durations">
-                  <input
-                    className={inputClass}
-                    value={
-                      durationDrafts[court.id] ?? court.durations.join(", ")
-                    }
-                    onChange={(event) =>
-                      setDurationDrafts((all) => ({
-                        ...all,
-                        [court.id]: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
+                <fieldset className="space-y-2 sm:col-span-2">
+                  <legend className="mb-2 text-xs font-medium">
+                    Booking durations
+                  </legend>
+                  <div className="flex flex-wrap gap-2">
+                    <label className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={allCourtDurationsSelected(court)}
+                        disabled={
+                          busy || !locationDurationsForCourt(court).length
+                        }
+                        onChange={(event) =>
+                          setDurationDrafts((drafts) => ({
+                            ...drafts,
+                            [court.id]: event.target.checked
+                              ? locationDurationsForCourt(court)
+                              : [],
+                          }))
+                        }
+                      />
+                      All
+                    </label>
+                    {locationDurationsForCourt(court).map((duration) => (
+                      <label
+                        key={duration}
+                        className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={durationsForCourt(court).includes(duration)}
+                          disabled={busy}
+                          onChange={() => toggleCourtDuration(court, duration)}
+                        />
+                        {duration} min
+                      </label>
+                    ))}
+                  </div>
+                  {!locationDurationsForCourt(court).length && (
+                    <p className="text-xs text-muted-foreground">
+                      This location has no configured durations.
+                    </p>
+                  )}
+                </fieldset>
                 <div className="sm:col-span-2">
                   <Field label="Description">
                     <textarea
@@ -456,7 +539,7 @@ export function CourtsPage() {
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={busy}
+                  disabled={busy || !durationsForCourt(court).length}
                   onClick={() => void updateCourt(court, {})}
                 >
                   Save court

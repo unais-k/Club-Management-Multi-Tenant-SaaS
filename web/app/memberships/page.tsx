@@ -176,7 +176,7 @@ export default function MembershipsPage() {
     return () => window.removeEventListener("afterprint", clearPrintState);
   }, []);
 
-  async function confirmDemoPayment(record: MembershipRecord) {
+  async function confirmPayment(record: MembershipRecord) {
     const token = useAuthStore.getState().accessToken;
     if (!token) {
       router.replace("/");
@@ -208,7 +208,7 @@ export default function MembershipsPage() {
         setReceiptToPrint(result.membership);
         window.setTimeout(() => window.print(), 150);
       }
-      setNotice("Payment recorded. No money was collected.");
+      setNotice("Payment confirmation recorded.");
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -368,7 +368,7 @@ export default function MembershipsPage() {
                         onPrint={printReceipt}
                         action={
                           <Button
-                            onClick={() => void confirmDemoPayment(record)}
+                            onClick={() => void confirmPayment(record)}
                             disabled={payingId !== null}
                             className="h-10 rounded-xl bg-[#1c5138] text-sm font-semibold text-white hover:bg-[#17452f]"
                           >
@@ -513,7 +513,7 @@ export default function MembershipsPage() {
               />
               <ReceiptLine
                 label="Payment status"
-                value="Simulated · no money collected"
+                  value="Payment confirmed"
               />
               <ReceiptLine
                 label="Date"
@@ -528,10 +528,6 @@ export default function MembershipsPage() {
               <span>Package fee</span>
               <span>{formatMoney(receiptToPrint.payment.amount)}</span>
             </div>
-            <p className="mt-6 text-xs leading-5 text-[#738077]">
-              This is a receipt for development and testing. No payment
-              provider was used and no money was collected.
-            </p>
           </div>
         </section>
       )}

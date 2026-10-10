@@ -580,8 +580,7 @@ export function AvailabilityView({
               ))}
             </div>
             <p className="mt-6 text-center text-xs text-[#929d94]">
-              Select a time to review your booking. Payment is simulated for
-              this step.
+              Select a time to review your booking and confirm the reservation.
             </p>
           </>
         )}

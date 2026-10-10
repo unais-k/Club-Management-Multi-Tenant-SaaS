@@ -142,7 +142,7 @@ export default function BookingsPage() {
     if (!cancelTarget) return;
     const token = useAuthStore.getState().accessToken;
     if (!token) {
-        router.replace("/");
+      router.replace("/");
       return;
     }
     setCancelling(true);
@@ -170,9 +170,7 @@ export default function BookingsPage() {
             }
           : current,
       );
-      setNotice(
-        "Booking cancelled. This simulated flow does not issue refunds or payments.",
-      );
+      setNotice("Booking cancelled. No refund was issued.");
       setCancelTarget(null);
     } catch (caught) {
       setError(
