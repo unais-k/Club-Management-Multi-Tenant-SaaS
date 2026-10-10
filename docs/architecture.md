@@ -40,6 +40,12 @@ flowchart LR
 Shift-based bookings retain their demo booking flow and can print a booking
 receipt. These receipts do not represent a collected payment.
 
+## Rate limiting
+
+The NestJS throttler uses its built-in in-memory storage; the backend does not
+use Redis. Rate-limit counters are per process and reset when that process
+restarts, so they are not shared across multiple backend instances.
+
 ## Request flow
 1. The client sends `Authorization: Bearer <access token>`.
 2. Guards authenticate (user and club loaded from the DB, so deactivation applies immediately) and check the role.

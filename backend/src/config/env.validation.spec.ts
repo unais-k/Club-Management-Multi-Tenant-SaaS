@@ -10,32 +10,13 @@ const validConfig = {
   JWT_REFRESH_SECRET: 'b'.repeat(32),
 };
 
-describe('validateEnv Redis configuration', () => {
-  it('allows Redis to be unset outside production', () => {
+describe('validateEnv', () => {
+  it('accepts valid required configuration without Redis in every environment', () => {
     expect(
       validateEnv({ ...validConfig, NODE_ENV: 'development' }),
     ).toMatchObject(validConfig);
-  });
-
-  it('requires Redis in production', () => {
-    expect(() =>
-      validateEnv({ ...validConfig, NODE_ENV: 'production' }),
-    ).toThrow('REDIS_URL is required in production for shared rate limiting');
-  });
-
-  it('accepts redis and rediss URLs', () => {
     expect(
-      validateEnv({
-        ...validConfig,
-        NODE_ENV: 'production',
-        REDIS_URL: 'rediss://cache:6380',
-      }),
+      validateEnv({ ...validConfig, NODE_ENV: 'production' }),
     ).toMatchObject(validConfig);
-  });
-
-  it('rejects unsupported Redis URL protocols', () => {
-    expect(() =>
-      validateEnv({ ...validConfig, REDIS_URL: 'https://cache.example' }),
-    ).toThrow('REDIS_URL must be a valid redis:// or rediss:// URL');
   });
 });

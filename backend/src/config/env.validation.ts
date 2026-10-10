@@ -30,21 +30,5 @@ export function validateEnv(config: Record<string, unknown>) {
     );
   }
 
-  const redisUrl = config.REDIS_URL;
-  if (config.NODE_ENV === 'production' && !redisUrl) {
-    throw new Error(
-      'REDIS_URL is required in production for shared rate limiting',
-    );
-  }
-  if (redisUrl) {
-    try {
-      const parsed = new URL(String(redisUrl));
-      if (parsed.protocol !== 'redis:' && parsed.protocol !== 'rediss:')
-        throw new Error();
-    } catch {
-      throw new Error('REDIS_URL must be a valid redis:// or rediss:// URL');
-    }
-  }
-
   return config;
 }

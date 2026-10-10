@@ -71,6 +71,7 @@ See [docs/architecture.md](docs/architecture.md) and [docs/erd.md](docs/erd.md).
 ## Design decisions
 - **Tenant isolation:** shared tables with `clubId`; the club comes from the token, never from input; every query filters by it; other clubs get 404.
 - **Authentication:** bcrypt passwords; 15-minute access JWT; 7-day refresh JWT whose SHA-256 hash is stored and rotated on every use (reuse ends the session); the DB user is loaded on each request, so deactivation applies at once; registration creates consumers only.
+- **Rate limiting:** Nest Throttler uses its built-in in-memory storage. Redis is not used; counters are local to each backend process and reset when it restarts.
 - **Pricing model is fixed after creation.** Changing it would invalidate existing prices and bookings, so it is chosen when the club is created and cannot be edited.
 - **Duration validation:** locations own the durations; courts may only use a subset; the service rejects anything else (400), and location edits that would orphan a court are blocked (409).
 - **Court hours vs location hours:** a court's hours must lie inside the location's merged opening hours; the availability engine also intersects them as a safety net.
@@ -96,3 +97,4 @@ See [docs/architecture.md](docs/architecture.md) and [docs/erd.md](docs/erd.md).
 - Changing opening hours, court hours or durations does not re-check existing bookings (only courts are checked).
 - One refresh token per user (a new login replaces the old session); access tokens stay valid until expiry after logout.
 - Availability is computed per request (no caching); no real payment processing, refunds or payment reconciliation.
+- Rate limits are not shared between multiple backend processes and reset on restart because throttling is in memory.
