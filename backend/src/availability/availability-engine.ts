@@ -1,7 +1,13 @@
+/**
+ * Pure availability calculations for one court on one date. Functions merge,
+ * intersect, and subtract minute ranges to remove closures/bookings, then align
+ * candidate slots to the club's duration grid.
+ */
 import { mergeRanges } from '../common/helpers/schedule.js';
 import type { MinuteRange } from '../common/helpers/time.js';
 
 // Everything that decides if a court can be booked, for ONE court on ONE date
+/** Input ranges needed to calculate one court's availability for one date. */
 export interface DayInput {
   locationHours: MinuteRange[]; // location opening periods for that weekday
   courtHours: MinuteRange[] | null; // null = court follows the location hours
@@ -15,14 +21,23 @@ export type BlockReason =
   | 'LOCATION_UNAVAILABLE'
   | 'ALREADY_BOOKED';
 
+/** Finds the greatest common divisor used to align duration start grids. */
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 
-// 30,60,90,120 -> 30    45,60 -> 15    60 -> 60
+/**
+ * Finds the shared start-time increment for all offered durations.
+ * @param durations Session lengths in minutes, e.g. [30, 60, 90].
+ * @returns The greatest common divisor in minutes, e.g. 30.
+ */
 export function slotStep(durations: number[]): number {
   return durations.reduce((a, b) => gcd(a, b));
 }
 
-// The parts of A that are also inside B
+/**
+ * Calculates the overlap between two sets of minute ranges.
+ * @param a First ranges; @param b Second ranges.
+ * @returns Sorted ranges that exist in both inputs.
+ */
 export function intersectRanges(a: MinuteRange[], b: MinuteRange[]): MinuteRange[] {
   const A = mergeRanges(a);
   const B = mergeRanges(b);
@@ -39,7 +54,11 @@ export function intersectRanges(a: MinuteRange[], b: MinuteRange[]): MinuteRange
   return out;
 }
 
-// The parts of "base" that are NOT covered by "remove"
+/**
+ * Removes blocked ranges from a base set of ranges.
+ * @param base Initially available ranges; @param remove Ranges to subtract.
+ * @returns The remaining sorted free ranges.
+ */
 export function subtractRanges(base: MinuteRange[], remove: MinuteRange[]): MinuteRange[] {
   let result = mergeRanges(base);
   for (const hole of mergeRanges(remove)) {
@@ -57,14 +76,23 @@ export function subtractRanges(base: MinuteRange[], remove: MinuteRange[]): Minu
   return result;
 }
 
-// Time that can still be booked: open hours minus unavailable periods minus bookings
+/**
+ * Combines location/court hours, then subtracts closures and existing bookings.
+ * @param input Ranges for one court and date.
+ * @returns Minute ranges still available to book.
+ */
 export function computeFreeWindows(input: DayInput): MinuteRange[] {
   const location = mergeRanges(input.locationHours);
   const open = input.courtHours ? intersectRanges(location, input.courtHours) : location;
   return subtractRanges(subtractRanges(open, input.unavailable), input.bookings);
 }
 
-// All bookable slots of one duration. Starts sit on the step grid.
+/**
+ * Generates duration-sized booking options aligned to a start-time grid.
+ * @param freeWindows Available ranges; @param durationMinutes Requested session length.
+ * @param step Start-time increment; @param earliestStart Minimum permitted start minute.
+ * @returns Every slot that fits wholly inside a free range.
+ */
 export function generateSlots(
   freeWindows: MinuteRange[],
   durationMinutes: number,
@@ -82,12 +110,18 @@ export function generateSlots(
   return slots;
 }
 
-// Checks one requested range. null = it can be booked, otherwise the first reason it cannot.
+/**
+ * Determines the first reason a requested court time is blocked.
+ * @param input Location/court hours, closures, and existing bookings.
+ * @param start Requested start minute; @param end Exclusive end minute.
+ * @returns `null` when the range is allowed, otherwise its first blocking reason.
+ */
 export function findBlockingReason(
   input: DayInput,
   start: number,
   end: number,
 ): BlockReason | null {
+  // These predicates keep the checks below readable while using the requested range.
   const fitsInside = (ranges: MinuteRange[]) =>
     mergeRanges(ranges).some((r) => start >= r.start && end <= r.end);
   const overlaps = (ranges: MinuteRange[]) => ranges.some((r) => start < r.end && end > r.start);

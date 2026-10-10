@@ -1,3 +1,7 @@
+/**
+ * TypeORM mapping for a club's named membership plan. Packages hold the current
+ * validity/quota offers; prices remains for legacy duration-based previews.
+ */
 import {
   Check,
   Column,

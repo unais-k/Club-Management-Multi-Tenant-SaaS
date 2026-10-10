@@ -1,3 +1,4 @@
+/** Tests that weekly schedules can fit real slots for each offered duration. */
 import { describe, expect, it } from 'vitest';
 import { durationsWithoutWeeklySlots } from './weekly-schedule-validation.js';
 

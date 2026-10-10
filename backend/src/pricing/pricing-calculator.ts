@@ -1,5 +1,11 @@
+/**
+ * Pure shift-pricing calculator. Splits a booking at shift boundaries, prices
+ * each piece proportionally from the full-duration rate, and returns cent-rounded
+ * total and line-item segments without making database or framework calls.
+ */
 import { toHHmm } from '../common/helpers/time.js';
 
+/** Time range for one shift, represented as minutes from midnight. */
 export interface ShiftWindow {
   id: string;
   name: string;
@@ -7,12 +13,14 @@ export interface ShiftWindow {
   endMinute: number;
 }
 
+/** One configured full-session price for Normal (null shift) or a named shift. */
 export interface PriceEntry {
   durationMinutes: number;
   shiftId: string | null; // null = Normal
   price: number;
 }
 
+/** One portion of a quote, including source shift and apportioned amount. */
 export interface QuoteSegment {
   shiftId: string | null;
   shiftName: string;
@@ -23,8 +31,17 @@ export interface QuoteSegment {
   amount: number; // part charged for these minutes
 }
 
+/** Thrown when a segment has no configured full-duration price for its shift. */
 export class MissingPriceError extends Error {}
 
+/**
+ * Prices a booking across one or more named shifts, using Normal pricing outside shifts.
+ * @param input Start minute, full booking duration, configured shift windows,
+ * and per-duration Normal/shift prices.
+ * @returns `{ total, segments }`; for a booking wholly inside one shift, segments
+ * contains one line, while a boundary-crossing booking has one line per range.
+ * Throws MissingPriceError if any segment lacks a configured matching price.
+ */
 export function calculateShiftPrice(input: {
   startMinute: number;
   durationMinutes: number;

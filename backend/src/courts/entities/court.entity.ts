@@ -1,3 +1,7 @@
+/**
+ * TypeORM mapping for a court within a club location. A court may inherit all
+ * location durations/hours or define a duration subset and custom weekly hours.
+ */
 import {
   Column,
   CreateDateColumn,

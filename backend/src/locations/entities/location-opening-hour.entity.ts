@@ -1,3 +1,7 @@
+/**
+ * TypeORM row for one weekly location opening period. Day uses 0=Sunday through
+ * 6=Saturday; start/end are minute offsets from midnight, with end exclusive.
+ */
 import {
   Check,
   Column,

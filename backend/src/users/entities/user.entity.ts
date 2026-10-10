@@ -1,3 +1,8 @@
+/**
+ * TypeORM mapping for platform-admin, club-admin, and consumer accounts.
+ * Club/email is unique; credential/session hashes are excluded from normal
+ * queries so responses cannot accidentally expose them.
+ */
 import {
   Column,
   CreateDateColumn,

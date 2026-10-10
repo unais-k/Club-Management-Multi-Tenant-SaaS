@@ -1,8 +1,13 @@
+/**
+ * Verifies membership consumer search is constrained to active consumer users
+ * belonging to the requesting club.
+ */
 import { describe, expect, it, vi } from 'vitest';
 import { MembershipsService } from './memberships.service.js';
 import { UserRole } from '../common/enums/index.js';
 
 describe('MembershipsService club scoping', () => {
+  /** Confirms the repository query applies the club, role, and active filters. */
   it('only searches active consumer accounts in the admin club', async () => {
     const userRepo = { find: vi.fn().mockResolvedValue([]) };
     const service = new MembershipsService(

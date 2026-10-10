@@ -1554,7 +1554,7 @@
                 ]
             }
         },
-        "/me/membership/{id}/confirm-demo-payment": {
+        "/me/membership/{id}/confirm-payment": {
             "post": {
                 "description": "Marks the package fee as SIMULATED_PAID and returns a printable receipt. This is a demo flow only: no payment provider is called and no money is collected.",
                 "operationId": "MeMembershipController_confirmDemoPayment",
@@ -1570,7 +1570,7 @@
                 ],
                 "responses": {
                     "201": {
-                        "description": "Demo payment recorded with a receipt."
+                        "description": "Payment recorded with a receipt."
                     },
                     "409": {
                         "description": "The assignment was cancelled or its package is unavailable."
@@ -1581,7 +1581,7 @@
                         "bearer": []
                     }
                 ],
-                "summary": "Confirm demo payment for an assigned membership package",
+                "summary": "Confirm payment for an assigned membership package",
                 "tags": [
                     "Memberships"
                 ]

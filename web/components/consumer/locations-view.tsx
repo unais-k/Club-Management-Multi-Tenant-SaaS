@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -61,7 +61,7 @@ export function LocationsView({ profile, onSignOut }: Props) {
     null,
   );
 
-  const loadLocations = useCallback(async () => {
+  async function loadLocations() {
     const token = useAuthStore.getState().accessToken;
     if (!token) {
       setError("Your session has ended. Please sign in again.");
@@ -91,12 +91,12 @@ export function LocationsView({ profile, onSignOut }: Props) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }
 
   useEffect(() => {
     setToday(new Date().getDay());
     void loadLocations();
-  }, [loadLocations]);
+  }, []);
 
   const todayName = today === null ? "Today" : weekdays[today];
 

@@ -1,3 +1,7 @@
+/**
+ * Nest module wiring for pricing. Registers shift/court-price and asset/tenant
+ * repositories, imports membership pricing support, and exposes PricingService.
+ */
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Court } from '../courts/entities/court.entity.js';

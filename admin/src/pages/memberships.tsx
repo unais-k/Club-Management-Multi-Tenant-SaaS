@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -122,7 +121,7 @@ export function MembershipsPage() {
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [selectedPackageId, setSelectedPackageId] = useState("");
 
-  const load = useCallback(async () => {
+  async function load() {
     setLoading(true);
     setError("");
     try {
@@ -157,9 +156,9 @@ export function MembershipsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }
 
-  const loadAssignments = useCallback(async () => {
+  async function loadAssignments() {
     try {
       const query = new URLSearchParams();
       if (assignmentSearch.trim()) query.set("search", assignmentSearch.trim());
@@ -173,15 +172,15 @@ export function MembershipsPage() {
         err instanceof Error ? err.message : "Could not load assignments",
       );
     }
-  }, [assignmentSearch]);
+  }
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, []);
 
   useEffect(() => {
     void loadAssignments();
-  }, [loadAssignments]);
+  }, [assignmentSearch]);
 
   useEffect(() => {
     if (!assignOpen) return;
@@ -402,7 +401,7 @@ export function MembershipsPage() {
         }),
       });
       setNotice(
-        `Package assigned to ${selectedConsumer.name}. They need to confirm the demo payment before booking.`,
+        `Package assigned to ${selectedConsumer.name}. They need to confirm the payment before booking.`,
       );
       setAssignOpen(false);
       setSelectedConsumer(null);
@@ -1000,14 +999,14 @@ export function MembershipsPage() {
                   </div>
                   {item.status === "PENDING_PAYMENT" && (
                     <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
-                      Awaiting consumer demo checkout. No payment has been
+                      Awaiting consumer checkout. No payment has been
                       collected; booking access is locked until checkout is
                       confirmed.
                     </p>
                   )}
                   {item.payment?.status === "SIMULATED_PAID" && (
                     <p className="mt-2 text-[10px] text-muted-foreground">
-                      Demo receipt recorded{" "}
+                      Receipt recorded{" "}
                       {item.payment.paidAt
                         ? dateLabel(item.payment.paidAt)
                         : ""}{" "}

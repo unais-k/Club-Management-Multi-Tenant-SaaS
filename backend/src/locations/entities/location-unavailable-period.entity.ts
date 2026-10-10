@@ -1,3 +1,7 @@
+/**
+ * TypeORM row for a one-date location closure, such as an event or maintenance
+ * window. The date is club-local and the time range is stored as minute offsets.
+ */
 import {
   Check,
   Column,

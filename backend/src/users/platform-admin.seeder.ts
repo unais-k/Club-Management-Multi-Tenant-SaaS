@@ -1,3 +1,8 @@
+/**
+ * Startup seeder for the first platform administrator. Reads credentials from
+ * environment configuration, stores a bcrypt hash, and does nothing if a
+ * platform-admin account already exists.
+ */
 import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -10,11 +15,22 @@ import { User } from './entities/user.entity.js';
 export class PlatformAdminSeeder implements OnApplicationBootstrap {
   private readonly logger = new Logger(PlatformAdminSeeder.name);
 
+  /**
+   * @param userRepo Persists or checks user accounts.
+   * @param config Reads PLATFORM_ADMIN_EMAIL and PLATFORM_ADMIN_PASSWORD.
+   * @returns No value; Nest injects both dependencies for startup seeding.
+   */
   constructor(
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     private readonly config: ConfigService,
   ) {}
 
+  /**
+   * Creates the platform-admin account during application startup only when
+   * both configured credentials exist and no platform admin is already present.
+   * @returns Promise<void>; logs a warning when credentials are absent and
+   * otherwise logs after the account is created.
+   */
   async onApplicationBootstrap() {
     const email = this.config.get<string>('PLATFORM_ADMIN_EMAIL');
     const password = this.config.get<string>('PLATFORM_ADMIN_PASSWORD');

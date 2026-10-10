@@ -1,9 +1,9 @@
 import {
-  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
-  type FormEvent,
+  type SubmitEvent,
 } from "react";
 import { CalendarClock, MapPin, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ import {
 import { apiRequest } from "@/lib/api";
 
 type Hours = { dayOfWeek: number; openTime: string; closeTime: string };
+// Local-only row with a stable key so inputs keep focus while typing.
+type HoursRow = Hours & { uid: string };
 type Closure = {
   id: string;
   date: string;
@@ -48,6 +50,9 @@ const days = [
   "Friday",
   "Saturday",
 ];
+const newUid = () => Math.random().toString(36).slice(2);
+const toRows = (hours: Hours[]): HoursRow[] =>
+  hours.map((row) => ({ ...row, uid: newUid() }));
 const durationsFrom = (value: string) =>
   [
     ...new Set(
@@ -72,7 +77,9 @@ export function LocationsPage() {
   const [address, setAddress] = useState("");
   const [details, setDetails] = useState("");
   const [durations, setDurations] = useState("60, 90");
-  const [hours, setHours] = useState<Hours[]>([]);
+  const [hours, setHours] = useState<HoursRow[]>([]);
+  // Raw text of the "Durations" field so commas/spaces can be typed freely.
+  const [durationsText, setDurationsText] = useState("");
   const [periods, setPeriods] = useState<Closure[]>([]);
   const [closureDate, setClosureDate] = useState(
     new Date().toISOString().slice(0, 10),
@@ -81,9 +88,25 @@ export function LocationsPage() {
   const [closureEnd, setClosureEnd] = useState("13:00");
   const [closureReason, setClosureReason] = useState("");
 
-  const selected =
-    locations.find((location) => location.id === selectedId) ?? locations[0];
-  const load = useCallback(async () => {
+  const selected = useMemo(
+    () =>
+      locations.find((location) => location.id === selectedId) ??
+      locations[0],
+    [locations, selectedId],
+  );
+  const activeId = selected?.id;
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+
+  function patchSelected(patch: Partial<Location>) {
+    setLocations((items) =>
+      items.map((item) =>
+        item.id === activeId ? { ...item, ...patch } : item,
+      ),
+    );
+  }
+
+  async function load() {
     setLoading(true);
     setError("");
     try {
@@ -101,9 +124,9 @@ export function LocationsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }
 
-  const loadPeriods = useCallback(async (id: string) => {
+  async function loadPeriods(id: string) {
     try {
       setPeriods(
         await apiRequest<Closure[]>(`/locations/${id}/unavailable-periods`),
@@ -115,18 +138,22 @@ export function LocationsPage() {
           : "Could not load unavailable periods",
       );
     }
-  }, []);
+  }
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, []);
+  // Only re-sync the editable form state when the selected location changes,
+  // not on every keystroke (which updates `locations`).
   useEffect(() => {
-    if (!selected) return;
-    setHours(selected.openingHours);
-    void loadPeriods(selected.id);
-  }, [selectedId, locations, selected, loadPeriods]);
+    const current = selectedRef.current;
+    if (!current) return;
+    setHours(toRows(current.openingHours));
+    setDurationsText(current.durations.join(", "));
+    void loadPeriods(current.id);
+  }, [activeId]);
 
-  async function createLocation(event: FormEvent) {
+  async function createLocation(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError("");
@@ -147,6 +174,7 @@ export function LocationsPage() {
       setName("");
       setAddress("");
       setDetails("");
+      setDurations("60, 90");
       setNotice(
         "Location created. Set its opening hours to make it available.",
       );
@@ -159,7 +187,7 @@ export function LocationsPage() {
     }
   }
 
-  async function saveLocation(event: FormEvent) {
+  async function saveLocation(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected) return;
     setBusy(true);
@@ -179,6 +207,7 @@ export function LocationsPage() {
       setLocations((items) =>
         items.map((item) => (item.id === updated.id ? updated : item)),
       );
+      setDurationsText(updated.durations.join(", "));
       setNotice("Location details saved.");
     } catch (err) {
       setError(
@@ -189,7 +218,7 @@ export function LocationsPage() {
     }
   }
 
-  async function saveHours(event: FormEvent) {
+  async function saveHours(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected) return;
     setBusy(true);
@@ -208,6 +237,7 @@ export function LocationsPage() {
       setLocations((items) =>
         items.map((item) => (item.id === updated.id ? updated : item)),
       );
+      setHours(toRows(updated.openingHours));
       setNotice("Weekly opening hours saved.");
     } catch (err) {
       setError(
@@ -218,7 +248,7 @@ export function LocationsPage() {
     }
   }
 
-  async function addClosure(event: FormEvent) {
+  async function addClosure(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected) return;
     setBusy(true);
@@ -267,7 +297,24 @@ export function LocationsPage() {
     }
   }
 
-  const dayNames = useMemo(() => days, []);
+  const hoursByDay = useMemo(
+    () => days.map((_, day) => hours.filter((row) => row.dayOfWeek === day)),
+    [hours],
+  );
+  function addWindow(dayOfWeek: number) {
+    setHours((items) => [
+      ...items,
+      { uid: newUid(), dayOfWeek, openTime: "08:00", closeTime: "22:00" },
+    ]);
+  }
+  function updateWindow(uid: string, patch: Partial<Hours>) {
+    setHours((items) =>
+      items.map((item) => (item.uid === uid ? { ...item, ...patch } : item)),
+    );
+  }
+  function removeWindow(uid: string) {
+    setHours((items) => items.filter((item) => item.uid !== uid));
+  }
 
   return (
     <div className="space-y-5">
@@ -406,13 +453,7 @@ export function LocationsPage() {
                       className={inputClass}
                       value={selected.name}
                       onChange={(event) =>
-                        setLocations((items) =>
-                          items.map((item) =>
-                            item.id === selected.id
-                              ? { ...item, name: event.target.value }
-                              : item,
-                          ),
-                        )
+                        patchSelected({ name: event.target.value })
                       }
                     />
                   </Field>
@@ -422,13 +463,7 @@ export function LocationsPage() {
                       className={inputClass}
                       value={selected.address}
                       onChange={(event) =>
-                        setLocations((items) =>
-                          items.map((item) =>
-                            item.id === selected.id
-                              ? { ...item, address: event.target.value }
-                              : item,
-                          ),
-                        )
+                        patchSelected({ address: event.target.value })
                       }
                     />
                   </Field>
@@ -439,17 +474,16 @@ export function LocationsPage() {
                     <input
                       required
                       className={inputClass}
-                      value={selected.durations.join(", ")}
+                      value={durationsText}
                       onChange={(event) => {
-                        const values = durationsFrom(event.target.value);
-                        setLocations((items) =>
-                          items.map((item) =>
-                            item.id === selected.id
-                              ? { ...item, durations: values }
-                              : item,
-                          ),
-                        );
+                        setDurationsText(event.target.value);
+                        patchSelected({
+                          durations: durationsFrom(event.target.value),
+                        });
                       }}
+                      onBlur={() =>
+                        setDurationsText(selected.durations.join(", "))
+                      }
                     />
                   </Field>
                   <Field label="Status">
@@ -457,16 +491,9 @@ export function LocationsPage() {
                       className={selectClass}
                       value={String(selected.isActive)}
                       onChange={(event) =>
-                        setLocations((items) =>
-                          items.map((item) =>
-                            item.id === selected.id
-                              ? {
-                                  ...item,
-                                  isActive: event.target.value === "true",
-                                }
-                              : item,
-                          ),
-                        )
+                        patchSelected({
+                          isActive: event.target.value === "true",
+                        })
                       }
                     >
                       <option value="true">Active</option>
@@ -479,19 +506,13 @@ export function LocationsPage() {
                         className={textAreaClass}
                         value={selected.details ?? ""}
                         onChange={(event) =>
-                          setLocations((items) =>
-                            items.map((item) =>
-                              item.id === selected.id
-                                ? { ...item, details: event.target.value }
-                                : item,
-                            ),
-                          )
-                        }
+                        patchSelected({ details: event.target.value })
+                      }
                       />
                     </Field>
                   </div>
                   <div className="flex justify-end sm:col-span-2">
-                    <Button disabled={busy}>
+                    <Button disabled={busy || selected.durations.length === 0}>
                       {busy ? "Saving…" : "Save details"}
                     </Button>
                   </div>
@@ -507,93 +528,60 @@ export function LocationsPage() {
                   onSubmit={(event) => void saveHours(event)}
                   className="space-y-3"
                 >
-                  {dayNames.map((dayName, dayOfWeek) => (
-                    <div key={dayOfWeek} className="rounded-lg bg-muted/35 p-3">
+                  {days.map((dayName, dayOfWeek) => (
+                    <div key={dayName} className="rounded-lg bg-muted/35 p-3">
                       <div className="mb-2 flex items-center justify-between">
                         <span className="text-xs font-semibold">{dayName}</span>
                         <Button
                           type="button"
                           size="sm"
                           variant="ghost"
-                          onClick={() =>
-                            setHours((items) => [
-                              ...items,
-                              {
-                                dayOfWeek,
-                                openTime: "08:00",
-                                closeTime: "22:00",
-                              },
-                            ])
-                          }
+                          onClick={() => addWindow(dayOfWeek)}
                         >
                           <Plus className="size-3.5" />
                           Add window
                         </Button>
                       </div>
                       <div className="space-y-2">
-                        {hours
-                          .filter((row) => row.dayOfWeek === dayOfWeek)
-                          .map((row) => (
-                            <div
-                              key={`${row.dayOfWeek}-${row.openTime}-${row.closeTime}-${hours.indexOf(row)}`}
-                              className="grid grid-cols-[1fr_1fr_auto] items-center gap-2"
+                        {hoursByDay[dayOfWeek].map((row) => (
+                          <div
+                            key={row.uid}
+                            className="grid grid-cols-[1fr_1fr_auto] items-center gap-2"
+                          >
+                            <input
+                              aria-label={`${dayName} opening time`}
+                              type="time"
+                              className={inputClass}
+                              value={row.openTime}
+                              onChange={(event) =>
+                                updateWindow(row.uid, {
+                                  openTime: event.target.value,
+                                })
+                              }
+                            />
+                            <input
+                              aria-label={`${dayName} closing time`}
+                              type="time"
+                              className={inputClass}
+                              value={row.closeTime}
+                              onChange={(event) =>
+                                updateWindow(row.uid, {
+                                  closeTime: event.target.value,
+                                })
+                              }
+                            />
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              aria-label={`Remove ${dayName} window`}
+                              onClick={() => removeWindow(row.uid)}
                             >
-                              <input
-                                aria-label={`${dayName} opening time`}
-                                type="time"
-                                className={inputClass}
-                                value={row.openTime}
-                                onChange={(event) =>
-                                  setHours((items) =>
-                                    items.map((item, index) =>
-                                      index === hours.indexOf(row)
-                                        ? {
-                                            ...item,
-                                            openTime: event.target.value,
-                                          }
-                                        : item,
-                                    ),
-                                  )
-                                }
-                              />
-                              <input
-                                aria-label={`${dayName} closing time`}
-                                type="time"
-                                className={inputClass}
-                                value={row.closeTime}
-                                onChange={(event) =>
-                                  setHours((items) =>
-                                    items.map((item, index) =>
-                                      index === hours.indexOf(row)
-                                        ? {
-                                            ...item,
-                                            closeTime: event.target.value,
-                                          }
-                                        : item,
-                                    ),
-                                  )
-                                }
-                              />
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                aria-label={`Remove ${dayName} window`}
-                                onClick={() =>
-                                  setHours((items) =>
-                                    items.filter(
-                                      (_, index) =>
-                                        index !== hours.indexOf(row),
-                                    ),
-                                  )
-                                }
-                              >
-                                <Trash2 className="size-4 text-muted-foreground" />
-                              </Button>
-                            </div>
-                          ))}
-                        {hours.filter((row) => row.dayOfWeek === dayOfWeek)
-                          .length === 0 && (
+                              <Trash2 className="size-4 text-muted-foreground" />
+                            </Button>
+                          </div>
+                        ))}
+                        {hoursByDay[dayOfWeek].length === 0 && (
                           <p className="text-[10px] text-muted-foreground">
                             Closed
                           </p>

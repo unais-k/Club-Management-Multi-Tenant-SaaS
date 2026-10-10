@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -84,7 +83,7 @@ export function PricingPage() {
     [shifts],
   );
 
-  const loadLocations = useCallback(async () => {
+  async function loadLocations() {
     setLoading(true);
     setError("");
     try {
@@ -102,9 +101,9 @@ export function PricingPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }
 
-  const loadLocationData = useCallback(async (id: string) => {
+  async function loadLocationData(id: string) {
     if (!id) {
       setCourts([]);
       setShifts([]);
@@ -129,9 +128,9 @@ export function PricingPage() {
         err instanceof Error ? err.message : "Could not load pricing data",
       );
     }
-  }, []);
+  }
 
-  const loadPrices = useCallback(async (id: string) => {
+  async function loadPrices(id: string) {
     if (!id) {
       setPriceData(null);
       return;
@@ -152,17 +151,17 @@ export function PricingPage() {
         err instanceof Error ? err.message : "Could not load court prices",
       );
     }
-  }, []);
+  }
 
   useEffect(() => {
     void loadLocations();
-  }, [loadLocations]);
+  }, []);
   useEffect(() => {
     void loadLocationData(locationId);
-  }, [locationId, loadLocationData]);
+  }, [locationId]);
   useEffect(() => {
     void loadPrices(courtId);
-  }, [courtId, loadPrices]);
+  }, [courtId]);
 
   async function createShift(event: FormEvent) {
     event.preventDefault();

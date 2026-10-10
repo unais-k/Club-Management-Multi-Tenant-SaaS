@@ -1,9 +1,7 @@
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
-  useMemo,
   useState,
 } from "react";
 import {
@@ -92,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("club-admin:session-expired", expire);
   }, []);
 
-  const login = useCallback(async (input: LoginInput) => {
+  async function login(input: LoginInput) {
     const result = await apiRequest<TokenResponse>("/auth/login", {
       method: "POST",
       authenticated: false,
@@ -117,9 +115,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearSessionTokens();
       throw error;
     }
-  }, []);
+  }
 
-  const logout = useCallback(async () => {
+  async function logout() {
     try {
       await apiRequest("/auth/logout", {
         method: "POST",
@@ -129,14 +127,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearSessionTokens();
       setUser(null);
     }
-  }, []);
+  }
 
-  const value = useMemo(
-    () => ({ user, isReady, login, logout }),
-    [user, isReady, login, logout],
+  return (
+    <AuthContext.Provider value={{ user, isReady, login, logout }}>
+      {children}
+    </AuthContext.Provider>
   );
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

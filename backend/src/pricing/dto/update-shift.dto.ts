@@ -1,3 +1,4 @@
+/** Partial shift edit body; locationId is omitted so a shift cannot move locations. */
 import { OmitType, PartialType } from '@nestjs/swagger';
 import { CreateShiftDto } from './create-shift.dto.js';
 

@@ -1,3 +1,8 @@
+/**
+ * Backend process entry point. Creates the Nest application, installs global
+ * request/error handling and validation, configures CORS and Swagger, then
+ * starts listening on the configured HTTP port.
+ */
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
@@ -6,6 +11,11 @@ import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor.js';
 
+/**
+ * Builds and starts the HTTP server using the root AppModule.
+ * @returns Promise<void>; resolves after the server begins listening. Startup
+ * configuration errors reject the promise and prevent the API from starting.
+ */
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     // Verbose Nest logs: shows InstanceLoader / RoutesResolver / RouterExplorer

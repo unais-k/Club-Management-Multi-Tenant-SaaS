@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-} from "react";
+import { useEffect, useMemo, useState, type SyntheticEvent } from "react";
 import { Clock3, Grid2X2, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -75,6 +69,9 @@ export function CourtsPage() {
   const [description, setDescription] = useState("");
   const [durationMode, setDurationMode] = useState("all");
   const [durations, setDurations] = useState("");
+  const [durationDrafts, setDurationDrafts] = useState<Record<string, string>>(
+    {},
+  );
   const [hoursDrafts, setHoursDrafts] = useState<Record<string, HoursDraft[]>>(
     {},
   );
@@ -82,7 +79,7 @@ export function CourtsPage() {
     locations.find((item) => item.id === locationId) ?? locations[0];
   const selectedDurations = useMemo(() => durationList(durations), [durations]);
 
-  const loadLocations = useCallback(async () => {
+  async function loadLocations() {
     setLoading(true);
     setError("");
     try {
@@ -100,28 +97,29 @@ export function CourtsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }
 
-  const loadCourts = useCallback(async (id: string) => {
+  async function loadCourts(id: string) {
     if (!id) {
       setCourts([]);
       return;
     }
     try {
       setCourts(await apiRequest<Court[]>(`/locations/${id}/courts`));
+      setDurationDrafts({});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load courts");
     }
-  }, []);
+  }
 
   useEffect(() => {
     void loadLocations();
-  }, [loadLocations]);
+  }, []);
   useEffect(() => {
     void loadCourts(locationId);
-  }, [locationId, loadCourts]);
+  }, [locationId]);
 
-  async function createCourt(event: FormEvent) {
+  async function createCourt(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!location) return;
     setBusy(true);
@@ -151,6 +149,15 @@ export function CourtsPage() {
   }
 
   async function updateCourt(court: Court, changes: Partial<Court>) {
+    const draft = durationDrafts[court.id];
+    const nextDurations =
+      changes.durations ??
+      (draft === undefined ? court.durations : durationList(draft));
+    if (!nextDurations.length) {
+      setNotice("");
+      setError("Enter at least one valid duration (5–480 minutes).");
+      return;
+    }
     setBusy(true);
     setError("");
     setNotice("");
@@ -160,13 +167,17 @@ export function CourtsPage() {
         body: JSON.stringify({
           name: changes.name ?? court.name,
           description: changes.description ?? court.description ?? "",
-          durations: changes.durations ?? court.durations,
+          durations: nextDurations,
           isActive: changes.isActive ?? court.isActive,
         }),
       });
       setCourts((items) =>
         items.map((item) => (item.id === updated.id ? updated : item)),
       );
+      setDurationDrafts((all) => {
+        const { [court.id]: _removed, ...rest } = all;
+        return rest;
+      });
       setNotice("Court updated.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update court");
@@ -175,7 +186,10 @@ export function CourtsPage() {
     }
   }
 
-  async function saveHours(court: Court, event: FormEvent<HTMLFormElement>) {
+  async function saveHours(
+    court: Court,
+    event: SyntheticEvent<HTMLFormElement>,
+  ) {
     event.preventDefault();
     setBusy(true);
     setError("");
@@ -402,17 +416,15 @@ export function CourtsPage() {
                 <Field label="Durations">
                   <input
                     className={inputClass}
-                    value={court.durations.join(", ")}
-                    onChange={(event) => {
-                      const values = durationList(event.target.value);
-                      setCourts((items) =>
-                        items.map((item) =>
-                          item.id === court.id
-                            ? { ...item, durations: values }
-                            : item,
-                        ),
-                      );
-                    }}
+                    value={
+                      durationDrafts[court.id] ?? court.durations.join(", ")
+                    }
+                    onChange={(event) =>
+                      setDurationDrafts((all) => ({
+                        ...all,
+                        [court.id]: event.target.value,
+                      }))
+                    }
                   />
                 </Field>
                 <div className="sm:col-span-2">

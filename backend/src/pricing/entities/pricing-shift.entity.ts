@@ -1,3 +1,7 @@
+/**
+ * TypeORM mapping for a named pricing window at one club location. Court prices
+ * may reference a shift; outside every configured shift the Normal price applies.
+ */
 import {
   Check,
   Column,

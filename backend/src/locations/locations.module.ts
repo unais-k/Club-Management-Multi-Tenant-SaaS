@@ -1,3 +1,7 @@
+/**
+ * Nest module for location management. Registers location/hour/closure and court
+ * repositories, imports booking protection helpers, and exposes LocationsService.
+ */
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LocationOpeningHour } from './entities/location-opening-hour.entity.js';

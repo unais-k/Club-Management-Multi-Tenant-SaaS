@@ -1,3 +1,7 @@
+/**
+ * Nest wiring for availability. Registers tenant/location/court/booking
+ * repositories, imports pricing resolution, and exposes AvailabilityService.
+ */
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Booking } from '../bookings/entities/booking.entity.js';

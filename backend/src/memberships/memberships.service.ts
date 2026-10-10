@@ -1,3 +1,9 @@
+/**
+ * Membership domain service. Club admins manage plans/packages and assign them
+ * to consumers; consumers view assignments and confirm the payment. The
+ * service also calculates package quotes, tracks confirmed-booking quota use,
+ * and formats assignment/payment responses.
+ */
 import {
   BadRequestException,
   ConflictException,
@@ -42,6 +48,7 @@ import { UserMembership } from './entities/user-membership.entity.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Lifecycle state computed from assignment payment, dates, cancellation, and quota. */
 export type MembershipStatus =
   | 'ACTIVE'
   | 'SCHEDULED'
@@ -52,6 +59,17 @@ export type MembershipStatus =
 
 @Injectable()
 export class MembershipsService {
+  /**
+   * @param membershipRepo Reads/writes membership plan definitions and legacy prices.
+   * @param userMembershipRepo Reads/writes consumer package assignments.
+   * @param packageRepo Reads/writes validity/quota/duration package options.
+   * @param userRepo searches consumers and validates assignment ownership.
+   * @param bookingRepo counts confirmed bookings charged against package quotas.
+   * @param tenantRepo resolves whether membership pricing is enabled for a club.
+   * @param locationRepo discovers durations offered across the club's locations.
+   * @param dataSource performs atomic plan-price, assignment, and payment changes.
+   * @returns No value; Nest injects the repositories and transaction source.
+   */
   constructor(
     @InjectRepository(Membership)
     private readonly membershipRepo: Repository<Membership>,
@@ -72,6 +90,12 @@ export class MembershipsService {
 
   // ---------- Plans (club admin) ----------
 
+  /**
+   * Creates a membership plan for a membership-priced club.
+   * @param clubId Authenticated club UUID.
+   * @param dto Plan name, optional description, and default validity in days.
+   * @returns Promise of the formatted plan response with an empty prices list.
+   */
   async create(clubId: string, dto: CreateMembershipDto) {
     await this.assertMembershipBased(clubId);
     const name = dto.name.trim();
@@ -94,6 +118,13 @@ export class MembershipsService {
     }
   }
 
+  /**
+   * Lists plans in a club; membership-priced consumers see only active plans
+   * that have legacy price rows, while admins see all plans. Shift clubs return [].
+   * @param clubId Authenticated club UUID.
+   * @param role Caller role used to filter consumer-visible plans.
+   * @returns Promise of formatted plan responses (empty for shift-based clubs).
+   */
   async findAll(clubId: string, role: UserRole) {
     // Shift-based clubs have no plans: return an empty list
     if ((await this.getPricingModel(clubId)) !== PricingModel.MEMBERSHIP_BASED) return [];
@@ -108,6 +139,14 @@ export class MembershipsService {
       .map((p) => this.toResponse(p));
   }
 
+  /**
+   * Loads one plan in the club; consumers cannot see inactive/unpriced plans.
+   * Admin responses also list location durations with no legacy plan price.
+   * @param clubId Authenticated club UUID.
+   * @param role Caller role determining visibility and admin-only missingDurations.
+   * @param id Membership plan UUID.
+   * @returns Promise of the plan response, with `missingDurations` for admins.
+   */
   async findOne(clubId: string, role: UserRole, id: string) {
     const plan = await this.getOwned(clubId, id);
     if (role === UserRole.CONSUMER && !this.isAvailable(plan)) {
@@ -126,6 +165,14 @@ export class MembershipsService {
     };
   }
 
+  /**
+   * Updates a plan's name, description, default validity, or active state.
+   * Existing assignments retain their copied package/date/fee terms.
+   * @param clubId Authenticated club UUID.
+   * @param id Membership plan UUID.
+   * @param dto Partial set of editable plan fields.
+   * @returns Promise of the refreshed admin plan response.
+   */
   async update(clubId: string, id: string, dto: UpdateMembershipDto) {
     const plan = await this.getOwned(clubId, id);
 
@@ -147,6 +194,13 @@ export class MembershipsService {
     return this.findOne(clubId, UserRole.CLUB_ADMIN, id);
   }
 
+  /**
+   * Soft-deletes a plan only when no non-cancelled unexpired assignment refers
+   * to it; otherwise deactivation is required to preserve member history.
+   * @param clubId Authenticated club UUID.
+   * @param id Membership plan UUID to delete.
+   * @returns Promise<void>; active holders cause HTTP 409.
+   */
   async remove(clubId: string, id: string) {
     await this.getOwned(clubId, id); // 404 if it is not ours
 
@@ -161,6 +215,14 @@ export class MembershipsService {
     await this.membershipRepo.softDelete({ id, clubId });
   }
 
+  /**
+   * Replaces the complete legacy per-duration price list after checking each
+   * duration is offered by at least one club location.
+   * @param clubId Authenticated club UUID.
+   * @param id Membership plan UUID.
+   * @param dto Complete list of `{ durationMinutes, price }` rows; omitted rows are deleted.
+   * @returns Promise of the refreshed admin plan response after the transaction.
+   */
   async setPrices(clubId: string, id: string, dto: SetMembershipPricesDto) {
     await this.assertMembershipBased(clubId);
     const plan = await this.getOwned(clubId, id);
@@ -195,6 +257,13 @@ export class MembershipsService {
 
   // ---------- Packages (club admin) ----------
 
+  /**
+   * Lists a plan's package options and counts how many consumer assignments
+   * have ever used each option.
+   * @param clubId Authenticated club UUID.
+   * @param membershipId Membership plan UUID.
+   * @returns Promise of package responses augmented with `assignmentCount`.
+   */
   async listPackages(clubId: string, membershipId: string) {
     await this.getOwned(clubId, membershipId);
     const packages = await this.packageRepo.find({
@@ -222,6 +291,15 @@ export class MembershipsService {
     }));
   }
 
+  /**
+   * Lists active package purchase/booking options that match a duration and
+   * optionally one membership plan.
+   * @param clubId Club UUID defining package visibility.
+   * @param durationMinutes Requested package booking duration.
+   * @param membershipId Optional plan UUID to narrow results.
+   * @returns Promise of options with plan name, validity, quota, unit rate, and
+   * calculated `packageFee`.
+   */
   async listPackageQuotes(
     clubId: string,
     durationMinutes: number,
@@ -255,6 +333,13 @@ export class MembershipsService {
       }));
   }
 
+  /**
+   * Creates a package option; package fee is derived as per-booking rate × quota.
+   * @param clubId Authenticated club UUID.
+   * @param membershipId Parent plan UUID.
+   * @param dto Validity days, booking duration, included booking quota, and rate.
+   * @returns Promise of the created package response including calculated fee.
+   */
   async createPackage(
     clubId: string,
     membershipId: string,
@@ -287,6 +372,14 @@ export class MembershipsService {
     }
   }
 
+  /**
+   * Updates or deactivates a package. Terms cannot change once any assignment
+   * exists, preserving the terms attached to historical/pending memberships.
+   * @param clubId Authenticated club UUID.
+   * @param id Package UUID.
+   * @param dto Partial package terms or active flag.
+   * @returns Promise of the saved package response including calculated fee.
+   */
   async updatePackage(
     clubId: string,
     id: string,
@@ -330,6 +423,13 @@ export class MembershipsService {
     }
   }
 
+  /**
+   * Permanently removes an unused package. Any assignment history requires the
+   * package to be deactivated instead.
+   * @param clubId Authenticated club UUID.
+   * @param id Package UUID to remove.
+   * @returns Promise<void>; assigned packages throw HTTP 409.
+   */
   async removePackage(clubId: string, id: string) {
     const membershipPackage = await this.getOwnedPackage(clubId, id);
     const assignments = await this.userMembershipRepo.count({
@@ -353,6 +453,12 @@ export class MembershipsService {
     }
   }
 
+  /**
+   * Searches active consumer accounts registered in this club only.
+   * @param clubId Authenticated club UUID used to exclude other clubs' users.
+   * @param query Optional name/email search text.
+   * @returns Promise of up to 25 safe `{ id, name, email }` results.
+   */
   async searchClubConsumers(
     clubId: string,
     query: SearchClubConsumersQueryDto,
@@ -373,6 +479,15 @@ export class MembershipsService {
     return consumers.map(({ id, name, email }) => ({ id, name, email }));
   }
 
+  /**
+   * Assigns an active package to an active consumer in the club, enforcing one
+   * current assignment, a five-day renewal window, fresh quota, and payment setup.
+   * @param clubId Authenticated club UUID.
+   * @param membershipId Plan UUID the package must belong to.
+   * @param dto Consumer UUID and selected package UUID.
+   * @returns Promise of the new pending-payment assignment response. A renewal
+   * starts at the old expiry; a new assignment starts now.
+   */
   async assignPackage(
     clubId: string,
     membershipId: string,
@@ -513,6 +628,15 @@ export class MembershipsService {
     );
   }
 
+  /**
+   * Records the consumer's demo checkout as SIMULATED_PAID, starts immediate
+   * assignments at confirmation time, and returns membership data plus a receipt.
+   * No external payment gateway or money movement is involved.
+   * @param clubId Authenticated club UUID.
+   * @param userId Authenticated consumer UUID; prevents paying another account's assignment.
+   * @param assignmentId Membership assignment UUID.
+   * @returns Promise of `{ membership, receipt }`, including quota use and receipt number.
+   */
   async confirmDemoPayment(clubId: string, userId: string, assignmentId: string) {
     const { assignment, payment } = await this.dataSource.transaction(
       async (manager) => {
@@ -581,6 +705,14 @@ export class MembershipsService {
     };
   }
 
+  /**
+   * Lists club assignments, optionally searching consumer name/email, ordered
+   * with active/renewal-eligible assignments ahead of pending/scheduled/history.
+   * @param clubId Authenticated club UUID.
+   * @param search Optional consumer name or email substring.
+   * @returns Promise of assignment response objects with package, payment, quota,
+   * consumer and computed status details.
+   */
   async listAssignments(clubId: string, search?: string) {
     const query = this.userMembershipRepo
       .createQueryBuilder('assignment')
@@ -629,6 +761,13 @@ export class MembershipsService {
 
   // ---------- Consumer membership view ----------
 
+  /**
+   * Builds the signed-in consumer's current, scheduled, pending-payment, and
+   * recent historical assignment groups, including receipts and quota usage.
+   * @param clubId Authenticated club UUID.
+   * @param userId Authenticated consumer UUID.
+   * @returns Promise of `{ current, scheduled, pendingPayment, history }`.
+   */
   async myMemberships(clubId: string, userId: string) {
     const now = new Date();
     const rows = await this.userMembershipRepo.find({
@@ -667,6 +806,16 @@ export class MembershipsService {
 
   // ---------- Price resolution (used by quotes now and by bookings in Step 10) ----------
 
+  /**
+   * Resolves a membership package's per-booking rate for the caller. Club admins
+   * preview an explicitly selected package; consumers must use their own paid,
+   * active assignment with matching duration and remaining credits.
+   * @param clubId Authenticated club UUID.
+   * @param durationMinutes Requested booking duration.
+   * @param opts Caller role and optional identity/plan/package selectors.
+   * @returns Promise of `{ price, membership, package, userMembershipId,
+   * bookingsRemaining }`; invalid or ambiguous assignments throw HTTP errors.
+   */
   async resolvePrice(
     clubId: string,
     durationMinutes: number,
@@ -781,6 +930,11 @@ export class MembershipsService {
     };
   }
 
+  /**
+   * Counts confirmed bookings grouped by membership-assignment id.
+   * @param ids Assignment UUIDs to count.
+   * @returns Promise<Map<assignmentId, count>>; empty input returns an empty map.
+   */
   private async getConfirmedBookingCounts(ids: string[]) {
     const counts = new Map<string, number>();
     if (ids.length === 0) return counts;
@@ -800,12 +954,22 @@ export class MembershipsService {
 
   // ---------- Helpers ----------
 
+  /**
+   * Reads the club's immutable pricing model.
+   * @param clubId Club UUID.
+   * @returns Promise of PricingModel; missing club throws HTTP 404.
+   */
   private async getPricingModel(clubId: string): Promise<PricingModel> {
     const tenant = await this.tenantRepo.findOneBy({ id: clubId });
     if (!tenant) throw new NotFoundException('Club not found');
     return tenant.pricingModel;
   }
 
+  /**
+   * Ensures an operation is only used by a membership-priced club.
+   * @param clubId Club UUID to inspect.
+   * @returns Promise<void>; shift-based clubs receive HTTP 409.
+   */
   private async assertMembershipBased(clubId: string) {
     if ((await this.getPricingModel(clubId)) !== PricingModel.MEMBERSHIP_BASED) {
       throw new ConflictException('This club uses shift-based pricing');
@@ -813,6 +977,12 @@ export class MembershipsService {
   }
 
   // Tenant check: the plan must belong to this club
+  /**
+   * Loads a plan with its legacy prices, scoped by both plan id and club id.
+   * @param clubId Authenticated club UUID.
+   * @param id Membership plan UUID.
+   * @returns Promise of the owned plan; otherwise HTTP 404.
+   */
   private async getOwned(clubId: string, id: string): Promise<Membership> {
     const plan = await this.membershipRepo.findOne({
       where: { id, clubId },
@@ -822,6 +992,12 @@ export class MembershipsService {
     return plan;
   }
 
+  /**
+   * Loads a package and its parent plan within the authenticated club.
+   * @param clubId Authenticated club UUID.
+   * @param id Package UUID.
+   * @returns Promise of the package with membership relation, or HTTP 404.
+   */
   private async getOwnedPackage(
     clubId: string,
     id: string,
@@ -834,6 +1010,12 @@ export class MembershipsService {
     return membershipPackage;
   }
 
+  /**
+   * Ensures some club location offers the package's booking duration.
+   * @param clubId Club UUID.
+   * @param durationMinutes Package duration to validate.
+   * @returns Promise<void>; missing location durations or unsupported duration throws HTTP 400.
+   */
   private async assertPackageDurationOffered(
     clubId: string,
     durationMinutes: number,
@@ -849,6 +1031,13 @@ export class MembershipsService {
     }
   }
 
+  /**
+   * Calculates the total package fee with cent precision and a database-safe maximum.
+   * @param pricePerBooking Numeric rate charged for each included booking.
+   * @param includedBookings Number of bookings in the package quota.
+   * @returns Rounded numeric fee, e.g. 20 × 28 returns 560; invalid/oversized
+   * totals throw HTTP 400.
+   */
   private packageFee(pricePerBooking: number, includedBookings: number): number {
     const total = Math.round(pricePerBooking * includedBookings * 100) / 100;
     if (!Number.isFinite(total) || total > 99_999_999.99) {
@@ -857,6 +1046,11 @@ export class MembershipsService {
     return total;
   }
 
+  /**
+   * Serializes a package and derives its total fee without adding a currency symbol.
+   * @param membershipPackage Persisted package entity.
+   * @returns Plain package response with `packageFee = pricePerBooking × includedBookings`.
+   */
   private toPackageResponse(membershipPackage: MembershipPackage) {
     return {
       id: membershipPackage.id,
@@ -876,11 +1070,21 @@ export class MembershipsService {
   }
 
   // Legacy price-preview visibility; package assignment is Club Admin controlled.
+  /**
+   * Checks whether a legacy membership plan can appear in consumer price previews.
+   * @param plan Plan entity with prices loaded.
+   * @returns `true` only when the plan is active and has at least one price.
+   */
   private isAvailable(plan: Membership): boolean {
     return plan.isActive && (plan.prices?.length ?? 0) > 0;
   }
 
   // Every duration offered by at least one location of the club
+  /**
+   * Collects the distinct duration options configured across a club's locations.
+   * @param clubId Club UUID.
+   * @returns Promise of unique durations sorted ascending, e.g. `[30, 60, 90]`.
+   */
   private async clubDurations(clubId: string): Promise<number[]> {
     const locations = await this.locationRepo.find({
       where: { clubId },
@@ -889,15 +1093,36 @@ export class MembershipsService {
     return [...new Set(locations.flatMap((l) => l.durations))].sort((a, b) => a - b);
   }
 
+  /**
+   * Checks membership-plan name uniqueness inside a club, excluding an optional
+   * current row during update.
+   * @param clubId Club UUID defining uniqueness.
+   * @param name Trimmed plan name.
+   * @param exceptId Optional plan id to ignore.
+   * @returns Promise<void>; duplicate name throws HTTP 409.
+   */
   private async assertNameFree(clubId: string, name: string, exceptId?: string) {
     const clash = await this.membershipRepo.findOneBy({ clubId, name });
     if (clash && clash.id !== exceptId) throw this.nameTaken(name);
   }
 
+  /**
+   * Creates the standard duplicate-plan conflict exception.
+   * @param name Conflicting plan name.
+   * @returns ConflictException explaining the club-scoped duplicate.
+   */
   private nameTaken(name: string) {
     return new ConflictException(`A membership named "${name}" already exists in this club`);
   }
 
+  /**
+   * Derives an assignment's lifecycle state using cancellation, payment, dates,
+   * and used package quota, in precedence order.
+   * @param um Consumer membership assignment.
+   * @param now Instant against which start/expiry are evaluated.
+   * @param usedBookings Number of confirmed bookings charged to its package.
+   * @returns One MembershipStatus string such as ACTIVE, PENDING_PAYMENT, or EXHAUSTED.
+   */
   private statusOf(
     um: UserMembership,
     now: Date,
@@ -911,12 +1136,22 @@ export class MembershipsService {
     return 'ACTIVE';
   }
 
+  /**
+   * Returns a normalized ascending list of legacy duration-price pairs.
+   * @param prices Optional membership price entities.
+   * @returns Sorted `{ durationMinutes, price }` objects; missing prices yield `[]`.
+   */
   private sortedPrices(prices?: MembershipPrice[]) {
     return [...(prices ?? [])]
       .sort((a, b) => a.durationMinutes - b.durationMinutes)
       .map((p) => ({ durationMinutes: p.durationMinutes, price: p.price }));
   }
 
+  /**
+   * Serializes a membership plan without exposing persistence-only properties.
+   * @param plan Membership entity, optionally with prices loaded.
+   * @returns Plain plan response with id/name/description/validity/status/prices/timestamps.
+   */
   private toResponse(plan: Membership) {
     return {
       id: plan.id,
@@ -930,6 +1165,17 @@ export class MembershipsService {
     };
   }
 
+  /**
+   * Serializes one consumer assignment with computed state, days remaining,
+   * package quota usage, optional receipt, consumer summary, and plan snapshot.
+   * @param um UserMembership assignment entity.
+   * @param plan Related membership plan, possibly null for missing legacy data.
+   * @param now Reference instant used to calculate status/daysLeft.
+   * @param membershipPackage Package entity, defaulting to the assignment relation.
+   * @param usedBookings Count of confirmed bookings charged to this assignment.
+   * @param payment Payment entity, defaulting to the assignment relation.
+   * @returns Plain assignment response including package/payment/consumer/plan data.
+   */
   private toUserMembershipResponse(
     um: UserMembership,
     plan: Membership | null,
@@ -974,6 +1220,11 @@ export class MembershipsService {
     };
   }
 
+  /**
+   * Creates the payment/receipt view shown to the consumer or Club Admin.
+   * @param payment Membership payment record.
+   * @returns `{ id, receiptNumber, amount, status, method, paidAt, simulated }`.
+   */
   private toPaymentResponse(payment: MembershipPayment) {
     return {
       id: payment.id,

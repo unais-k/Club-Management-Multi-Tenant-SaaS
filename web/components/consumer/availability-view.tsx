@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -206,8 +206,7 @@ export function AvailabilityView({
     setDate(nextDates[0]);
   }, [timeZone]);
 
-  const loadAvailability = useCallback(
-    async (signal: AbortSignal) => {
+  async function loadAvailability(signal: AbortSignal) {
       if (!membershipLoaded) return undefined;
       if (membershipError) {
         setError(membershipError);
@@ -255,9 +254,7 @@ export function AvailabilityView({
       } finally {
         if (!signal.aborted) setLoading(false);
       }
-    },
-    [date, effectiveDuration, location.id, membershipError, membershipLoaded],
-  );
+  }
 
   function chooseSlot(courtId: string, courtName: string, slot: Slot) {
     setSelectedSlot({ courtId, courtName, slot });
@@ -347,7 +344,7 @@ export function AvailabilityView({
     const controller = new AbortController();
     void loadAvailability(controller.signal);
     return () => controller.abort();
-  }, [loadAvailability]);
+  }, [date, effectiveDuration, location.id, membershipError, membershipLoaded]);
 
   const selectedDateLabel = date ? dateLabel(date, timeZone) : "Loading dates…";
 
@@ -601,12 +598,12 @@ export function AvailabilityView({
                   Booking confirmed
                 </DialogTitle>
                 <DialogDescription>
-                  Your court is reserved. This demo did not charge you.
+                  Your court is reserved.
                 </DialogDescription>
               </DialogHeader>
               <div className="rounded-xl border border-[#e5ebe5] bg-[#fafcf9] p-4">
                 <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#568167]">
-                  <TicketCheck size={15} /> Demo receipt
+                  <TicketCheck size={15} /> Receipt
                 </div>
                 <dl className="space-y-2.5 text-sm">
                   <div className="flex justify-between gap-4">
@@ -689,10 +686,6 @@ export function AvailabilityView({
                   </div>
                 </div>
               )}
-              <p className="rounded-lg bg-[#f5f3e8] px-3.5 py-3 text-xs leading-5 text-[#726b48]">
-                Demo confirmation only: this creates a confirmed booking, but no
-                payment is processed or collected.
-              </p>
               {bookingError && (
                 <p
                   role="alert"
@@ -715,7 +708,7 @@ export function AvailabilityView({
                   disabled={bookingSubmitting || !selectedSlot}
                   className="h-10 rounded-lg bg-[#1c5138] text-white hover:bg-[#17452f]"
                 >
-                  {bookingSubmitting ? "Confirming…" : "Confirm demo booking"}
+                  {bookingSubmitting ? "Confirming…" : "Confirm booking"}
                 </Button>
               </DialogFooter>
             </>

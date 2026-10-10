@@ -16,7 +16,11 @@ import { MembershipPackage } from './membership-package.entity.js';
 import { decimalTransformer } from '../../common/helpers/decimal.transformer.js';
 import { MembershipPayment } from './membership-payment.entity.js';
 
-// One row = one subscription of a consumer to a plan
+/**
+ * TypeORM mapping for one consumer's assignment to a membership package.
+ * Stores term dates/payment/cancellation snapshots and links bookings through
+ * userMembershipId so confirmed bookings consume this assignment's quota.
+ */
 @Entity('user_memberships')
 @Index(['clubId', 'userId'])
 @Index(['clubId', 'membershipId'])

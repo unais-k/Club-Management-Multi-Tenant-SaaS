@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, RefreshCw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -110,7 +110,7 @@ export function BookingsPage() {
     };
   }, [locationId]);
 
-  const load = useCallback(async () => {
+  async function load() {
     setLoading(true);
     setError("");
     try {
@@ -130,11 +130,11 @@ export function BookingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, status, period, locationId, courtId, dateFrom, dateTo]);
+  }
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [page, status, period, locationId, courtId, dateFrom, dateTo]);
 
   async function cancelBooking(booking: Booking) {
     if (

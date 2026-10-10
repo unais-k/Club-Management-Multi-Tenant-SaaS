@@ -1,3 +1,7 @@
+/**
+ * TypeORM row for one court-specific weekly opening period, stored as weekday
+ * and minute offsets from midnight. Used only when the court has custom hours.
+ */
 import {
   Check,
   Column,

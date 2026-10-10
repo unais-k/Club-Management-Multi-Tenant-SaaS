@@ -1,3 +1,4 @@
+/** Checks shift price selection, prorating across boundaries, and missing-price errors. */
 import { describe, expect, it } from 'vitest';
 import { MissingPriceError, calculateShiftPrice } from './pricing-calculator.js';
 
@@ -13,17 +14,20 @@ const prices = [
 ];
 
 describe('calculateShiftPrice', () => {
+  /** Normal rates apply when the booking falls outside all configured shifts. */
   it('uses the Normal price outside every shift', () => {
     const r = calculateShiftPrice({ startMinute: 720, durationMinutes: 60, shifts, prices });
     expect(r.total).toBe(15);
     expect(r.segments).toHaveLength(1);
   });
 
+  /** A booking contained in a shift uses that shift's configured rate. */
   it('uses the shift price inside a shift', () => {
     const r = calculateShiftPrice({ startMinute: 420, durationMinutes: 60, shifts, prices });
     expect(r.total).toBe(20);
   });
 
+  /** A booking crossing a shift boundary is priced proportionally by segment. */
   it('prorates a booking that crosses from a shift into Normal (08:30-09:30)', () => {
     const r = calculateShiftPrice({ startMinute: 510, durationMinutes: 60, shifts, prices });
     expect(r.segments.map((s) => s.amount)).toEqual([10, 7.5]);

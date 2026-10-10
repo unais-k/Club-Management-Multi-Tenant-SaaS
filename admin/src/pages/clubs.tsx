@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode, type SubmitEvent } from "react";
 import {
   Building2,
   CalendarDays,
@@ -143,6 +143,25 @@ function slugify(value: string) {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+// Keeps the Club ID field typable but always valid: spaces and symbols become
+// single hyphens, letters are lowercased, and a leading hyphen is dropped.
+function cleanSlugInput(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-/, "");
+}
+
+function isValidTimezone(value: string) {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function formatDate(value: string) {
@@ -759,19 +778,30 @@ export function ClubsPage() {
     setDialog({ kind: "edit", tenant });
   }
 
-  async function createTenant(event: FormEvent<HTMLFormElement>) {
+  async function createTenant(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
-    setIsSaving(true);
     setFormError("");
+    const payload: CreateTenantInput = {
+      ...createForm,
+      name: createForm.name.trim(),
+      slug: createForm.slug.replace(/-+$/, ""),
+      timezone: createForm.timezone.trim(),
+      adminName: createForm.adminName.trim(),
+      adminEmail: createForm.adminEmail.trim(),
+    };
+    if (!payload.slug) return setFormError("Enter a Club ID.");
+    if (!isValidTimezone(payload.timezone))
+      return setFormError("Enter a valid timezone, such as Asia/Kolkata.");
+    setIsSaving(true);
     try {
       await apiRequest<Tenant>("/tenants", {
         method: "POST",
-        body: JSON.stringify({ ...createForm, slug: createForm.slug.trim() }),
+        body: JSON.stringify(payload),
       });
       setDialog(null);
       setPage(1);
       setRefreshKey((value) => value + 1);
-      setNotice({ text: `${createForm.name} was created.`, isError: false });
+      setNotice({ text: `${payload.name} was created.`, isError: false });
     } catch (error) {
       setFormError(
         error instanceof Error ? error.message : "Could not create the club.",
@@ -781,15 +811,21 @@ export function ClubsPage() {
     }
   }
 
-  async function updateTenant(event: FormEvent<HTMLFormElement>) {
+  async function updateTenant(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (dialog?.kind !== "edit") return;
-    setIsSaving(true);
     setFormError("");
+    const payload: UpdateTenantInput = {
+      name: editForm.name.trim(),
+      timezone: editForm.timezone.trim(),
+    };
+    if (!isValidTimezone(payload.timezone))
+      return setFormError("Enter a valid timezone, such as Asia/Kolkata.");
+    setIsSaving(true);
     try {
       const updated = await apiRequest<Tenant>(`/tenants/${dialog.tenant.id}`, {
         method: "PUT",
-        body: JSON.stringify(editForm),
+        body: JSON.stringify(payload),
       });
       setDialog(null);
       setResult((current) => ({
@@ -1110,11 +1146,9 @@ export function ClubsPage() {
                   pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
                   value={createForm.slug}
                   onChange={(event) => {
-                    setSlugEdited(true);
-                    setCreateForm((form) => ({
-                      ...form,
-                      slug: event.target.value,
-                    }));
+                    const slug = cleanSlugInput(event.target.value);
+                    setSlugEdited(slug.length > 0);
+                    setCreateForm((form) => ({ ...form, slug }));
                   }}
                   placeholder="downtown-sports"
                 />

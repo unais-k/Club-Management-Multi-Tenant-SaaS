@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -117,7 +117,7 @@ export default function MembershipsPage() {
   );
   const clearSession = useAuthStore((state) => state.clearSession);
 
-  const loadPageData = useCallback(async (token: string) => {
+  async function loadPageData(token: string) {
     const [profileResponse, membershipsResponse] = await Promise.all([
       fetch(`${apiBaseUrl}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -143,9 +143,9 @@ export default function MembershipsPage() {
     ]);
     setProfile(user);
     setMemberships({ ...emptyMemberships, ...data });
-  }, []);
+  }
 
-  const refresh = useCallback(async () => {
+  async function refresh() {
     const token = useAuthStore.getState().accessToken;
     if (!token) {
       router.replace("/");
@@ -164,11 +164,11 @@ export default function MembershipsPage() {
     } finally {
       setLoading(false);
     }
-  }, [loadPageData, router]);
+  }
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, [router]);
 
   useEffect(() => {
     const clearPrintState = () => setReceiptToPrint(null);
@@ -187,7 +187,7 @@ export default function MembershipsPage() {
     setNotice("");
     try {
       const response = await fetch(
-        `${apiBaseUrl}/me/membership/${record.id}/confirm-demo-payment`,
+        `${apiBaseUrl}/me/membership/${record.id}/confirm-payment`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -200,7 +200,7 @@ export default function MembershipsPage() {
         throw new Error(
           (Array.isArray(result.message)
             ? result.message.join(" ")
-            : result.message) || "We couldn’t confirm the demo payment.",
+            : result.message) || "We couldn’t confirm the payment.",
         );
 
       await loadPageData(token);
@@ -208,12 +208,12 @@ export default function MembershipsPage() {
         setReceiptToPrint(result.membership);
         window.setTimeout(() => window.print(), 150);
       }
-      setNotice("Demo payment recorded. No money was collected.");
+      setNotice("Payment recorded. No money was collected.");
     } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
-          : "We couldn’t confirm the demo payment.",
+          : "We couldn’t confirm the payment.",
       );
     } finally {
       setPayingId(null);
@@ -240,13 +240,6 @@ export default function MembershipsPage() {
   }
 
   const timeZone = profile?.club?.timezone || "Asia/Kolkata";
-  const allRecords = [
-    ...memberships.pendingPayment,
-    ...(memberships.current ? [memberships.current] : []),
-    ...memberships.scheduled,
-    ...memberships.history,
-  ];
-
   return (
     <>
       <main className="min-h-screen bg-[#f6f8f5] text-[#19251e] print:hidden">
@@ -381,7 +374,7 @@ export default function MembershipsPage() {
                           >
                             {payingId === record.id
                               ? "Recording…"
-                              : `Confirm demo payment · ${formatMoney(record.packageFee ?? record.payment?.amount ?? 0)}`}
+                              : `Confirm payment · ${formatMoney(record.packageFee ?? record.payment?.amount ?? 0)}`}
                           </Button>
                         }
                       />
@@ -433,7 +426,7 @@ export default function MembershipsPage() {
                     </h2>
                     <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#738077]">
                       Your Club Admin manages membership packages. Once one is
-                      assigned to you, it will appear here for demo checkout.
+                      assigned to you, it will appear here for checkout.
                     </p>
                   </section>
                 )}
@@ -487,7 +480,7 @@ export default function MembershipsPage() {
               <div>
                 <p className="font-heading text-lg font-semibold">CourtSide</p>
                 <p className="text-xs text-[#738077]">
-                  {profile?.club?.name ?? "Club"} · Demo payment receipt
+                  {profile?.club?.name ?? "Club"} · Payment receipt
                 </p>
               </div>
             </div>
@@ -536,7 +529,7 @@ export default function MembershipsPage() {
               <span>{formatMoney(receiptToPrint.payment.amount)}</span>
             </div>
             <p className="mt-6 text-xs leading-5 text-[#738077]">
-              This is a demo receipt for development and testing. No payment
+              This is a receipt for development and testing. No payment
               provider was used and no money was collected.
             </p>
           </div>
@@ -628,7 +621,7 @@ function MembershipCard({
             : record.status === "SCHEDULED"
               ? `Begins ${formatDate(record.startsAt, timeZone)}`
               : record.payment?.status === "PENDING"
-                ? "Complete the demo checkout to activate this package"
+                ? "Complete the checkout to activate this package"
                 : statusLabel}
         </p>
         <div className="flex flex-wrap gap-2">

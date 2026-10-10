@@ -1,3 +1,8 @@
+/**
+ * TypeORM DataSource used by CLI migration and seed commands. Loads env files
+ * with the same priority as the application and points the CLI at entities and
+ * the single migration source file; schema synchronization remains disabled.
+ */
 import 'reflect-metadata';
 import { config } from 'dotenv';
 import { DataSource } from 'typeorm';

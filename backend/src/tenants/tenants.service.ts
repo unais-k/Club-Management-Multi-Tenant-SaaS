@@ -1,3 +1,8 @@
+/**
+ * Tenant business logic for platform-admin operations. Besides basic club CRUD,
+ * it creates the first club admin transactionally and assembles the club's
+ * schedule/pricing operations view from related location, court, and price data.
+ */
 import {
   BadRequestException,
   ConflictException,
@@ -23,6 +28,17 @@ import { Tenant } from './entities/tenant.entity.js';
 
 @Injectable()
 export class TenantsService {
+  /**
+   * @param tenantRepo Reads and writes club records.
+   * @param locationRepo Reads locations and their weekly opening-hour relations.
+   * @param unavailableRepo Reads date-specific location closures.
+   * @param courtRepo Reads courts and court-specific weekly hours.
+   * @param shiftRepo Reads pricing shifts configured for club locations.
+   * @param priceRepo Reads per-court pricing rows.
+   * @param membershipRepo Reads membership plans and their duration prices.
+   * @param dataSource Opens a database transaction for atomic club/admin creation.
+   * @returns No value; Nest injects these dependencies into this service.
+   */
   constructor(
     @InjectRepository(Tenant)
     private readonly tenantRepo: Repository<Tenant>,
@@ -41,6 +57,15 @@ export class TenantsService {
     private readonly dataSource: DataSource,
   ) {}
 
+  /**
+   * Creates a club and its first club-admin user as one database transaction.
+   * The admin password is bcrypt-hashed, email is normalized, and role is fixed
+   * to CLUB_ADMIN. A database uniqueness conflict on the slug becomes HTTP 409.
+   * @param dto Validated club identity, pricing model, optional timezone, and
+   * first-admin name/email/password from the platform-admin request.
+   * @returns Promise of the created Tenant entity; the admin account is persisted
+   * in the same transaction but is not included in this return value.
+   */
   async create(dto: CreateTenantDto): Promise<Tenant> {
     this.assertValidTimezone(dto.timezone);
 
@@ -53,6 +78,8 @@ export class TenantsService {
     try {
       // Transaction: both rows are saved, or neither is
       return await this.dataSource.transaction(async (manager) => {
+        // @param manager Transaction-scoped repository; it keeps tenant/admin writes atomic.
+        // @returns Saved Tenant entity, e.g. { id, name, slug, pricingModel, isActive, timezone }.
         const tenant = await manager.save(
           manager.create(Tenant, {
             name: dto.name,
@@ -86,6 +113,12 @@ export class TenantsService {
     }
   }
 
+  /**
+   * Searches clubs by partial name and applies pagination in the database.
+   * @param query Validated page (1-based), limit (1–100), and optional search text.
+   * @returns Promise of `{ data, meta }`; meta contains matching total, current
+   * page, page size, and calculated page count.
+   */
   async findAll(query: ListTenantsQueryDto) {
     const { page, limit, search } = query;
 
@@ -102,12 +135,25 @@ export class TenantsService {
     };
   }
 
+  /**
+   * Fetches one club record by primary key.
+   * @param id Club UUID to look up.
+   * @returns Promise of the Tenant entity, or throws HTTP 404 when absent.
+   */
   async findOne(id: string): Promise<Tenant> {
     const tenant = await this.tenantRepo.findOneBy({ id });
     if (!tenant) throw new NotFoundException('Tenant not found');
     return tenant;
   }
 
+  /**
+   * Builds the platform-admin operations view for a club using its local date.
+   * It gathers the next seven days of closures and the club's locations, courts,
+   * opening hours, shifts, court prices, and membership duration prices.
+   * @param id Club UUID whose operational data should be summarized.
+   * @returns Promise of a JSON-ready object with tenant summary, membershipPlans,
+   * dateRange, nested locations/courts/prices, and upcomingUnavailablePeriods.
+   */
   async getOperations(id: string) {
     const tenant = await this.findOne(id);
     const today = this.dateInTimezone(tenant.timezone);
@@ -244,6 +290,13 @@ export class TenantsService {
     };
   }
 
+  /**
+   * Updates the editable club fields after validating any supplied timezone.
+   * @param id Club UUID to update.
+   * @param dto Optional name and/or timezone; immutable slug and pricing model
+   * are excluded by the DTO.
+   * @returns Promise of the saved Tenant entity, or HTTP 404 if it does not exist.
+   */
   async update(id: string, dto: UpdateTenantDto): Promise<Tenant> {
     this.assertValidTimezone(dto.timezone);
     const tenant = await this.findOne(id);
@@ -251,6 +304,12 @@ export class TenantsService {
     return this.tenantRepo.save(tenant);
   }
 
+  /**
+   * Activates or deactivates a club. Deactivated clubs cannot be used to sign in.
+   * @param id Club UUID whose status should change.
+   * @param isActive `true` to activate, `false` to deactivate.
+   * @returns Promise of the saved Tenant entity with its new isActive value.
+   */
   async setStatus(id: string, isActive: boolean): Promise<Tenant> {
     const tenant = await this.findOne(id);
     tenant.isActive = isActive;
@@ -258,6 +317,12 @@ export class TenantsService {
   }
 
   // Timezone matters later for availability, so reject invalid names early
+  /**
+   * Checks an optional timezone against the runtime's IANA timezone database.
+   * @param timezone IANA timezone name such as `Asia/Kolkata`; omitted values
+   * are allowed so the entity/database default can apply.
+   * @returns No value on success; throws HTTP 400 for an invalid timezone name.
+   */
   private assertValidTimezone(timezone?: string) {
     if (!timezone) return;
     try {
@@ -267,6 +332,11 @@ export class TenantsService {
     }
   }
 
+  /**
+   * Gets today's calendar date in a club's timezone, formatted as YYYY-MM-DD.
+   * @param timezone IANA timezone used to interpret the current instant.
+   * @returns Local calendar date string for that timezone.
+   */
   private dateInTimezone(timezone: string): string {
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: timezone,
@@ -274,11 +344,17 @@ export class TenantsService {
       month: '2-digit',
       day: '2-digit',
     }).formatToParts(new Date());
+    /** @param type Date/time component to find; @returns Its formatted value or an empty string. */
     const part = (type: Intl.DateTimeFormatPartTypes) =>
       parts.find((entry) => entry.type === type)?.value ?? '';
     return `${part('year')}-${part('month')}-${part('day')}`;
   }
 
+  /**
+   * Converts a stored closure period from minute offsets into API time strings.
+   * @param period Location closure with date, start/end minute offsets, and reason.
+   * @returns Plain response fields with `HH:mm` start/end times and calculated duration.
+   */
   private toUnavailableResponse(period: LocationUnavailablePeriod) {
     return {
       id: period.id,

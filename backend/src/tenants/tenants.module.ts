@@ -1,3 +1,7 @@
+/**
+ * Nest module wiring for platform tenant management. Registers the entities
+ * used by TenantsService and exposes its controller and service providers.
+ */
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CourtOpeningHour } from '../courts/entities/court-opening-hour.entity.js';

@@ -1,3 +1,7 @@
+/**
+ * TypeORM mapping for a tenant (club), the top-level isolation boundary for
+ * club-owned users, locations, courts, bookings, and pricing configuration.
+ */
 import {
   Column,
   CreateDateColumn,

@@ -1,3 +1,4 @@
+/** Tests booking date bounds, earliest same-day start, and cancellation timing. */
 import { describe, expect, it } from 'vitest';
 import { addDays } from '../common/helpers/date.js';
 import {

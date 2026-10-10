@@ -13,9 +13,13 @@ import {
 import { decimalTransformer } from '../../common/helpers/decimal.transformer.js';
 import { UserMembership } from './user-membership.entity.js';
 
+/** Status values for the local payment/receipt flow. */
 export type MembershipPaymentStatus = 'PENDING' | 'SIMULATED_PAID';
 
-/** Demo checkout record and printable receipt for one assigned package. */
+/**
+ * TypeORM mapping for the demo checkout record and printable receipt attached
+ * one-to-one to a consumer's membership-package assignment.
+ */
 @Entity('membership_payments')
 @Index('UQ_membership_payment_assignment', ['userMembershipId'], { unique: true })
 @Index('IDX_membership_payments_member_date', ['clubId', 'userId', 'createdAt'])

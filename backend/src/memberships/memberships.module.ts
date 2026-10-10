@@ -1,3 +1,7 @@
+/**
+ * Nest module wiring for memberships. Registers plan/package/assignment/payment
+ * and related user/booking/location repositories, and exposes membership routes.
+ */
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Booking } from '../bookings/entities/booking.entity.js';

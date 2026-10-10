@@ -1,3 +1,9 @@
+/**
+ * TypeORM mapping for a court booking. Stores the booked time and price snapshot,
+ * tenant/user/facility references, lifecycle state, and membership assignment.
+ * Database checks constrain time/price fields; the partial GiST exclusion
+ * constraint prevents overlapping confirmed bookings for one court and date.
+ */
 import {
   Check,
   Column,

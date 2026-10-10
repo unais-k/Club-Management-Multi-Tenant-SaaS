@@ -1,3 +1,7 @@
+/**
+ * Startup task that ensures PostgreSQL has the btree_gist extension and the
+ * exclusion constraint preventing overlapping confirmed bookings per court/date.
+ */
 import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
@@ -5,8 +9,18 @@ import { DataSource } from 'typeorm';
 export class BookingConstraintsInitializer implements OnApplicationBootstrap {
   private readonly logger = new Logger(BookingConstraintsInitializer.name);
 
+  /**
+   * @param dataSource Executes the idempotent PostgreSQL setup statements.
+   * @returns No value; Nest injects the application DataSource.
+   */
   constructor(private readonly dataSource: DataSource) {}
 
+  /**
+   * Runs once after Nest finishes bootstrapping. Creates required database
+   * objects only when absent, then logs that overlap protection is ready.
+   * @returns Promise<void>; database errors reject startup so the API does not
+   * run without its booking-overlap safety constraint.
+   */
   async onApplicationBootstrap() {
     // btree_gist lets a GiST index combine "=" (uuid, date) with "&&" (range overlap)
     await this.dataSource.query('CREATE EXTENSION IF NOT EXISTS btree_gist');

@@ -15,7 +15,11 @@ import { decimalTransformer } from '../../common/helpers/decimal.transformer.js'
 import { Membership } from './membership.entity.js';
 import { UserMembership } from './user-membership.entity.js';
 
-/** A validity, booking-duration, and quota option within a membership plan. */
+/**
+ * TypeORM mapping for one purchasable package option under a membership plan.
+ * Its unique active key combines plan, validity, and duration; rate × quota
+ * determines the package fee, and assignments preserve the chosen package history.
+ */
 @Entity('membership_packages')
 @Index(
   'UQ_membership_package_option',

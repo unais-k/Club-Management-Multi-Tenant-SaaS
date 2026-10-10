@@ -1,3 +1,7 @@
+/**
+ * TypeORM mapping for a legacy plan price at one booking duration. New membership
+ * package pricing stores its rate/quota on MembershipPackage instead.
+ */
 import {
   Check,
   Column,

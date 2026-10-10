@@ -1,3 +1,8 @@
+/**
+ * Root NestJS module. Loads and validates environment configuration, configures
+ * database access and global throttling, and imports the feature modules that
+ * make up the API. This is the dependency graph used by main.ts at startup.
+ */
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
@@ -29,6 +34,13 @@ import { UsersModule } from './users/users.module.js';
     // General limit; login/register/refresh have a stricter one (see AuthController)
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
+      /**
+       * Builds the global in-memory request-throttling configuration.
+       * @param config Nest ConfigService, used to honor the test-only
+       * THROTTLE_DISABLED setting.
+       * @returns A 120-request/60-second default limit, with throttling skipped
+       * when THROTTLE_DISABLED is exactly `true`.
+       */
       useFactory: (config: ConfigService) => ({
         throttlers: [{ name: 'default', ttl: 60_000, limit: 120 }],
         skipIf: () => config.get('THROTTLE_DISABLED') === 'true',
@@ -36,6 +48,13 @@ import { UsersModule } from './users/users.module.js';
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
+      /**
+       * Creates the PostgreSQL TypeORM connection options from validated env config.
+       * @param config Nest ConfigService containing DB_HOST, DB_PORT,
+       * DB_USERNAME, DB_PASSWORD, and DB_NAME.
+       * @returns PostgreSQL options that auto-load entities but leave schema
+       * changes and migration execution to explicit migration commands.
+       */
       useFactory: (config: ConfigService) => ({
         type: 'postgres',
         host: config.get<string>('DB_HOST'),

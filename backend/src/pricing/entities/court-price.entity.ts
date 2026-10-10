@@ -1,3 +1,8 @@
+/**
+ * TypeORM mapping for one numeric court price at a duration and optional shift.
+ * A null shiftId represents Normal pricing; partial unique indexes separately
+ * enforce one Normal price and one price per named shift for each duration.
+ */
 import {
   Check,
   Column,

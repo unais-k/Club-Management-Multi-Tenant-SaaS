@@ -1,3 +1,8 @@
+/**
+ * Location business logic: location CRUD, weekly opening hours, date-specific
+ * closures, duration/schedule validation, and protection of existing bookings.
+ * Every lookup is scoped by the authenticated club UUID.
+ */
 import {
   BadRequestException,
   ConflictException,
@@ -32,6 +37,14 @@ import { Location } from './entities/location.entity.js';
 
 @Injectable()
 export class LocationsService {
+  /**
+   * @param locationRepo Reads and writes tenant-owned locations and weekly hours.
+   * @param periodRepo Reads/writes date-specific unavailable periods.
+   * @param courtRepo Checks court schedules and duration dependencies.
+   * @param dataSource runs atomic updates across location/court schedule rows.
+   * @param bookingsService prevents edits/deletions that conflict with bookings.
+   * @returns No value; Nest injects these dependencies into this service.
+   */
   constructor(
     @InjectRepository(Location)
     private readonly locationRepo: Repository<Location>,
@@ -45,6 +58,14 @@ export class LocationsService {
 
   // ---------- Locations ----------
 
+  /**
+   * Creates a location with normalized fields and sorted offered durations.
+   * New locations start with no opening hours (closed until configured).
+   * @param clubId Authenticated club UUID that owns the new location.
+   * @param dto Location name/address/details and supported booking durations.
+   * @returns Promise of the API location response with an empty openingHours array;
+   * duplicate names within the club throw HTTP 409.
+   */
   async create(clubId: string, dto: CreateLocationDto) {
     const name = dto.name.trim();
     await this.assertNameFree(clubId, name);
@@ -67,6 +88,15 @@ export class LocationsService {
     }
   }
 
+  /**
+   * Returns a searchable, paginated list of locations for one club. Consumers
+   * see active locations only; club admins can also see inactive locations.
+   * @param clubId Authenticated club UUID used to scope the database query.
+   * @param role Authenticated role, used to apply the consumer active-only rule.
+   * @param query Page, page size, and optional partial-name search.
+   * @returns Promise of `{ data, meta }`, with formatted locations and total/page/
+   * limit/totalPages metadata.
+   */
   async findAll(clubId: string, role: UserRole, query: ListLocationsQueryDto) {
     const { page, limit, search } = query;
 
@@ -89,6 +119,14 @@ export class LocationsService {
     };
   }
 
+  /**
+   * Loads one club-owned location and formats its opening hours. Consumers receive
+   * the same not-found result for an inactive location.
+   * @param clubId Authenticated club UUID.
+   * @param role Authenticated role, used to hide inactive locations from consumers.
+   * @param id Location UUID requested by the route.
+   * @returns Promise of one formatted location response, or HTTP 404 if unavailable.
+   */
   async findOne(clubId: string, role: UserRole, id: string) {
     const location = await this.getOwned(clubId, id);
     if (role === UserRole.CONSUMER && !location.isActive) {
@@ -97,6 +135,16 @@ export class LocationsService {
     return this.toResponse(location);
   }
 
+  /**
+   * Updates location details, durations, or active status. When durations change,
+   * it blocks removal of durations used by courts and validates that the location
+   * and active courts still have weekly bookable slots.
+   * @param clubId Authenticated club UUID.
+   * @param id Location UUID to update.
+   * @param dto Optional mutable location fields; name uniqueness is club-scoped.
+   * @returns Promise of the saved, formatted location response; conflicts or
+   * invalid schedules are returned as HTTP errors.
+   */
   async update(clubId: string, id: string, dto: UpdateLocationDto) {
     const location = await this.getOwned(clubId, id);
 
@@ -153,6 +201,13 @@ export class LocationsService {
     }
   }
 
+  /**
+   * Soft-deletes a location and its courts in one transaction after confirming
+   * there are no upcoming confirmed bookings under that location.
+   * @param clubId Authenticated club UUID.
+   * @param id Location UUID to remove.
+   * @returns Promise<void> after the soft deletes; upcoming bookings cause HTTP 409.
+   */
   async remove(clubId: string, id: string) {
     await this.getOwned(clubId, id); // 404 if it is not ours
     const upcoming = await this.bookingsService.countUpcoming(clubId, {
@@ -164,6 +219,8 @@ export class LocationsService {
       );
     }
     await this.dataSource.transaction(async (manager) => {
+      // @param manager Transaction-scoped EntityManager so both soft deletes commit or roll back together.
+      // @returns No value; the transaction is used only for its atomic database changes.
       await manager.softDelete(Court, { clubId, locationId: id });
       await manager.softDelete(Location, { id, clubId });
     });
@@ -171,6 +228,14 @@ export class LocationsService {
 
   // ---------- Opening hours ----------
 
+  /**
+   * Replaces the complete weekly schedule after validating time ranges, duplicate
+   * overlaps, minimum weekly slots, and all active/custom court schedules.
+   * @param clubId Authenticated club UUID.
+   * @param id Location UUID whose schedule is replaced.
+   * @param dto Complete set of weekly opening periods; omitted days are closed.
+   * @returns Promise of the location response with saved opening hours.
+   */
   async setOpeningHours(clubId: string, id: string, dto: SetOpeningHoursDto) {
     const location = await this.getOwned(clubId, id);
 
@@ -235,6 +300,14 @@ export class LocationsService {
 
   // ---------- Unavailable periods ----------
 
+  /**
+   * Adds a one-date closure period after checking the date/time range, overlap
+   * with other closures, and conflict with existing confirmed bookings.
+   * @param clubId Authenticated club UUID.
+   * @param id Location UUID receiving the closure.
+   * @param dto Local date, start/end times, and optional reason.
+   * @returns Promise of `{ id, date, startTime, endTime, durationMinutes, reason }`.
+   */
   async addUnavailablePeriod(
     clubId: string,
     id: string,
@@ -297,6 +370,12 @@ export class LocationsService {
     return this.toPeriodResponse(period);
   }
 
+  /**
+   * Lists all date-specific closure periods for one club-owned location.
+   * @param clubId Authenticated club UUID.
+   * @param id Location UUID whose closures are requested.
+   * @returns Promise of closure response objects sorted by date then start time.
+   */
   async listUnavailablePeriods(clubId: string, id: string) {
     const location = await this.getOwned(clubId, id);
     const periods = await this.periodRepo.find({
@@ -306,6 +385,13 @@ export class LocationsService {
     return periods.map((p) => this.toPeriodResponse(p));
   }
 
+  /**
+   * Deletes one closure only when it belongs to the requested club and location.
+   * @param clubId Authenticated club UUID.
+   * @param id Parent location UUID.
+   * @param periodId Unavailable-period UUID to delete.
+   * @returns Promise<void>; throws HTTP 404 if the period is not under that location.
+   */
   async removeUnavailablePeriod(clubId: string, id: string, periodId: string) {
     const location = await this.getOwned(clubId, id);
     const result = await this.periodRepo.delete({
@@ -320,6 +406,12 @@ export class LocationsService {
   // ---------- Helpers ----------
 
   // THE tenant check: id AND clubId must both match, otherwise 404
+  /**
+   * Loads a location by both primary key and club id, including weekly hours.
+   * @param clubId Authenticated club UUID.
+   * @param id Location UUID requested.
+   * @returns Promise of the owned Location entity, or HTTP 404 if not owned/found.
+   */
   private async getOwned(clubId: string, id: string): Promise<Location> {
     const location = await this.locationRepo.findOne({
       where: { id, clubId },
@@ -329,6 +421,14 @@ export class LocationsService {
     return location;
   }
 
+  /**
+   * Checks that a location name is unique within a club, allowing the current
+   * row during an update when `exceptId` matches.
+   * @param clubId Club UUID that defines the uniqueness scope.
+   * @param name Trimmed location name to check.
+   * @param exceptId Optional location UUID excluded from the collision check.
+   * @returns Promise<void>; throws the standard HTTP 409 name-conflict error.
+   */
   private async assertNameFree(
     clubId: string,
     name: string,
@@ -338,16 +438,36 @@ export class LocationsService {
     if (clash && clash.id !== exceptId) throw this.nameTaken(name);
   }
 
+  /**
+   * Creates the standard conflict exception for duplicate location names.
+   * @param name Conflicting location name.
+   * @returns ConflictException with a club-scoped duplicate-name message.
+   */
   private nameTaken(name: string) {
     return new ConflictException(
       `A location named "${name}" already exists in this club`,
     );
   }
 
+  /**
+   * Returns a new ascending-sorted duration array without mutating the input.
+   * @param durations Validated durations in minutes.
+   * @returns Sorted copy, e.g. `[30, 60, 90]`.
+   */
   private sortDurations(durations: number[]): number[] {
     return [...durations].sort((a, b) => a - b);
   }
 
+  /**
+   * Ensures a proposed weekly location schedule has at least one feasible slot
+   * for each required duration, using the availability schedule validator.
+   * @param subject Human-readable schedule name used in any error message.
+   * @param locationHours Weekly location ranges in minute offsets.
+   * @param durations Durations that must be bookable.
+   * @param gridDurations Durations that define valid start-time boundaries.
+   * @param courtHours Optional custom court schedule to intersect with location hours.
+   * @returns No value when valid; throws HTTP 400 listing durations with no slot.
+   */
   private assertWeeklySlots(
     subject: string,
     locationHours: readonly {
@@ -371,6 +491,13 @@ export class LocationsService {
       throw new BadRequestException(weeklySlotError(subject, missing));
   }
 
+  /**
+   * Validates every active court against proposed location hours and durations.
+   * @param courts Active courts belonging to the location, with custom hours loaded.
+   * @param locationHours Proposed weekly location schedule.
+   * @param locationDurations Durations the location will offer.
+   * @returns No value when all active courts remain bookable; otherwise HTTP 409.
+   */
   private assertActiveCourtSchedules(
     courts: Court[],
     locationHours: readonly {
@@ -397,6 +524,13 @@ export class LocationsService {
     }
   }
 
+  /**
+   * Converts a Location entity to its client response and formats minute offsets
+   * as HH:mm weekly opening-hour strings.
+   * @param l Location entity, optionally with openingHours loaded.
+   * @returns Plain location response with id/name/address/details/durations/status,
+   * openingHours, and created/updated timestamps.
+   */
   private toResponse(l: Location) {
     return {
       id: l.id,
@@ -419,6 +553,11 @@ export class LocationsService {
     };
   }
 
+  /**
+   * Converts a closure entity into its API representation.
+   * @param p LocationUnavailablePeriod with date and minute offsets.
+   * @returns `{ id, date, startTime, endTime, durationMinutes, reason }`.
+   */
   private toPeriodResponse(p: LocationUnavailablePeriod) {
     return {
       id: p.id,

@@ -203,7 +203,7 @@ Membership-owned rows include `clubId`; bookings reference the exact
 `GET /memberships/assignments`, `GET/POST /memberships/:id/packages`,
 `PUT /memberships/packages/:packageId`, and
 `POST /memberships/:id/assignments`. Consumers use `GET /me/membership` and
-`POST /me/membership/:id/confirm-demo-payment`. Booking quotes and creation use
+`POST /me/membership/:id/confirm-payment`. Booking quotes and creation use
 the assigned package; consumers cannot choose an arbitrary membership or
 package.
 

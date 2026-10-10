@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   CalendarDays,
@@ -75,6 +76,7 @@ function durationLabel(minutes: number) {
 }
 
 export default function BookingsPage() {
+  const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [period, setPeriod] = useState<"upcoming" | "past">("upcoming");
   const [page, setPage] = useState(1);
@@ -87,10 +89,10 @@ export default function BookingsPage() {
   const [receiptToPrint, setReceiptToPrint] = useState<Booking | null>(null);
   const clearSession = useAuthStore((state) => state.clearSession);
 
-  const loadBookings = useCallback(async () => {
+  async function loadBookings() {
     const token = useAuthStore.getState().accessToken;
     if (!token) {
-      window.location.assign("/");
+      router.replace("/");
       return;
     }
     setLoading(true);
@@ -130,17 +132,17 @@ export default function BookingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, period]);
+  }
 
   useEffect(() => {
     void loadBookings();
-  }, [loadBookings]);
+  }, [page, period]);
 
   async function cancelBooking() {
     if (!cancelTarget) return;
     const token = useAuthStore.getState().accessToken;
     if (!token) {
-      window.location.assign("/");
+        router.replace("/");
       return;
     }
     setCancelling(true);
@@ -463,9 +465,6 @@ export default function BookingsPage() {
                   {displayDate(cancelTarget.date)} · {cancelTarget.startTime} –{" "}
                   {cancelTarget.endTime}
                 </p>
-                <p className="mt-1 text-xs text-[#89938b]">
-                  Demo payment was not collected; no refund will be issued.
-                </p>
               </div>
             )}
             {error && (
@@ -552,17 +551,14 @@ export default function BookingsPage() {
               <div className="col-span-2 border-t pt-4">
                 <dt className="text-gray-500">
                   {receiptToPrint.membershipName
-                    ? `${receiptToPrint.membershipName} package rate (included; no booking payment collected)`
-                    : "Quoted court price (no payment collected)"}
+                    ? `${receiptToPrint.membershipName} package rate`
+                    : "Quoted court price"}
                 </dt>
                 <dd className="mt-1 text-xl font-semibold">
                   ${receiptToPrint.price.toFixed(2)}
                 </dd>
               </div>
             </dl>
-            <p className="mt-8 border-t pt-4 text-xs text-gray-500">
-              Demo receipt only. No payment was collected.
-            </p>
           </section>
         </>
       )}

@@ -1,3 +1,7 @@
+/**
+ * Consumer-only routes for viewing personal membership assignments and
+ * confirming the demo package payment that unlocks booking access.
+ */
 import { Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -18,6 +22,10 @@ import { MembershipsService } from './memberships.service.js';
 @Roles(UserRole.CONSUMER)
 @Controller('me/membership')
 export class MeMembershipController {
+  /**
+   * @param membershipsService Loads assignments and confirms demo receipts.
+   * @returns No value; Nest injects the service into this controller.
+   */
   constructor(private readonly membershipsService: MembershipsService) { }
 
   @Get()
@@ -26,18 +34,31 @@ export class MeMembershipController {
     description:
       'Membership packages are assigned by the Club Admin. Consumers cannot self-subscribe or cancel an assignment. The response includes payment status, booking quota usage, and printable receipt details when checkout is confirmed.',
   })
+  /**
+   * Gets the signed-in consumer's membership summary and history.
+   * @param clubId Authenticated club UUID.
+   * @param user Authenticated consumer; user.id scopes the assignments.
+   * @returns Promise of `{ current, scheduled, pendingPayment, history }`.
+   */
   mine(@ClubId() clubId: string, @CurrentUser() user: AuthUser) {
     return this.membershipsService.myMemberships(clubId, user.id);
   }
 
-  @Post(':id/confirm-demo-payment')
+  @Post(':id/confirm-payment')
   @ApiOperation({
-    summary: 'Confirm demo payment for an assigned membership package',
+    summary: 'Confirm payment for an assigned membership package',
     description:
-      'Marks the package fee as SIMULATED_PAID and returns a printable receipt. This is a demo flow only: no payment provider is called and no money is collected.',
+      'Marks the package fee as SIMULATED_PAID and returns a printable receipt. This is a flow only: no payment provider is called and no money is collected.',
   })
-  @ApiCreatedResponse({ description: 'Demo payment recorded with a receipt.' })
+  @ApiCreatedResponse({ description: 'payment recorded with a receipt.' })
   @ApiConflictResponse({ description: 'The assignment was cancelled or its package is unavailable.' })
+  /**
+   * Confirms the current consumer's payment for an assigned package.
+   * @param clubId Authenticated club UUID.
+   * @param user Authenticated consumer; user.id prevents confirming another member's payment.
+   * @param id Membership assignment UUID validated by ParseUUIDPipe.
+   * @returns Promise of `{ membership, receipt }`; no external payment is processed.
+   */
   confirmDemoPayment(
     @ClubId() clubId: string,
     @CurrentUser() user: AuthUser,

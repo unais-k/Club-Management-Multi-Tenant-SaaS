@@ -1,3 +1,4 @@
+/** Tests the configuration validator's required keys and JWT secret rules. */
 import { validateEnv } from './env.validation.js';
 
 const validConfig = {
@@ -10,6 +11,7 @@ const validConfig = {
   JWT_REFRESH_SECRET: 'b'.repeat(32),
 };
 
+/** Groups valid/invalid environment configuration examples. */
 describe('validateEnv', () => {
   it('accepts valid required configuration without Redis in every environment', () => {
     expect(

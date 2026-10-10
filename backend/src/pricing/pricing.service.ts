@@ -1,3 +1,8 @@
+/**
+ * Pricing domain service. Manages shift windows and court price rows, calculates
+ * one-off quotes for both pricing models, and builds a reusable pricer for
+ * availability/booking code without repeated database queries per slot.
+ */
 import {
   BadRequestException,
   ConflictException,
@@ -30,6 +35,7 @@ import {
 
 const RESERVED_SHIFT_NAMES = ['normal', 'default'];
 
+/** Price result for one candidate availability slot. */
 export interface SlotPrice {
   price: number | null;
   prices?: {
@@ -46,6 +52,7 @@ export interface SlotPrice {
   priceNote?: string; // why the price is missing
 }
 
+/** Preloaded price resolver used to quote multiple slots with one set of DB reads. */
 export interface Pricer {
   model: PricingModel;
   membership: { id: string; name: string } | null;
@@ -56,6 +63,16 @@ export interface Pricer {
 
 @Injectable()
 export class PricingService {
+  /**
+   * @param shiftRepo Reads/writes location-level shift windows.
+   * @param priceRepo Reads/writes court/duration/shift price rows.
+   * @param courtRepo validates court ownership and effective durations.
+   * @param locationRepo validates location ownership and activity.
+   * @param tenantRepo reads the club's fixed pricing model.
+   * @param dataSource replaces a court's complete price matrix atomically.
+   * @param membershipsService resolves package prices and member quota eligibility.
+   * @returns No value; Nest injects these repositories/services.
+   */
   constructor(
     @InjectRepository(PricingShift)
     private readonly shiftRepo: Repository<PricingShift>,
@@ -71,6 +88,12 @@ export class PricingService {
 
   // ---------- Shifts ----------
 
+  /**
+   * Creates a non-overlapping pricing shift for a location in a shift-priced club.
+   * @param clubId Authenticated club UUID.
+   * @param dto Location UUID, name, and time boundaries.
+   * @returns Promise of `{ id, locationId, name, startTime, endTime }`.
+   */
   async createShift(clubId: string, dto: CreateShiftDto) {
     await this.assertShiftBased(clubId);
     const location = await this.getLocation(clubId, dto.locationId);
@@ -96,6 +119,13 @@ export class PricingService {
     }
   }
 
+  /**
+   * Lists a location's shifts in start-time order.
+   * @param clubId Authenticated club UUID.
+   * @param role Caller role; consumers cannot read an inactive location.
+   * @param locationId Location UUID.
+   * @returns Promise of formatted shift records.
+   */
   async listShifts(clubId: string, role: UserRole, locationId: string) {
     const location = await this.getLocation(clubId, locationId, role);
     const shifts = await this.shiftRepo.find({
@@ -105,6 +135,13 @@ export class PricingService {
     return shifts.map((s) => this.toShiftResponse(s));
   }
 
+  /**
+   * Updates shift name/time while ensuring its new range and name do not conflict.
+   * @param clubId Authenticated club UUID.
+   * @param id Shift UUID.
+   * @param dto Partial new name/start/end time.
+   * @returns Promise of the updated formatted shift record.
+   */
   async updateShift(clubId: string, id: string, dto: UpdateShiftDto) {
     const shift = await this.getShift(clubId, id);
 
@@ -133,6 +170,12 @@ export class PricingService {
   }
 
   // Prices that belong to the shift are removed automatically (ON DELETE CASCADE)
+  /**
+   * Deletes a shift and lets the database cascade-delete prices attached to it.
+   * @param clubId Authenticated club UUID.
+   * @param id Shift UUID.
+   * @returns Promise<void> after deletion; non-owned shifts return HTTP 404.
+   */
   async removeShift(clubId: string, id: string) {
     await this.getShift(clubId, id); // 404 if it is not ours
     await this.shiftRepo.delete({ id, clubId });
@@ -140,6 +183,14 @@ export class PricingService {
 
   // ---------- Court prices ----------
 
+  /**
+   * Replaces all pricing rows for a court after validating durations, shift scope,
+   * duplicate combinations, and club pricing model.
+   * @param clubId Authenticated club UUID.
+   * @param courtId Court UUID whose matrix is replaced.
+   * @param dto Complete `{ durationMinutes, shiftId?, price }` list.
+   * @returns Promise of the admin price-matrix response with missing combinations.
+   */
   async setCourtPrices(
     clubId: string,
     courtId: string,
@@ -197,6 +248,15 @@ export class PricingService {
     return this.getCourtPrices(clubId, UserRole.CLUB_ADMIN, courtId);
   }
 
+  /**
+   * Returns effective court durations, applicable shifts, and configured prices.
+   * Admins also see missing duration/shift pairs; consumers see only active assets.
+   * @param clubId Authenticated club UUID.
+   * @param role Caller role controlling visibility and admin-only missing list.
+   * @param courtId Court UUID.
+   * @returns Promise of `{ courtId, courtName, durations, shifts, prices }`, plus
+   * `missing` for club admins.
+   */
   async getCourtPrices(clubId: string, role: UserRole, courtId: string) {
     const { court, location } = await this.getCourtWithLocation(
       clubId,
@@ -263,6 +323,16 @@ export class PricingService {
 
   // ---------- Quote ----------
 
+  /**
+   * Calculates one quote based on the club's configured pricing model. Shift-based
+   * prices may split a booking across Normal/shift segments; membership pricing
+   * resolves a selected package for admins or the caller's assigned package.
+   * @param clubId Authenticated club UUID.
+   * @param user Authenticated caller and role.
+   * @param q Court UUID, start time, duration, and optional plan/package filters.
+   * @returns Promise of quote base fields with `total` and model-specific package
+   * or segment information; missing shift rates produce HTTP 422.
+   */
   async quote(clubId: string, user: AuthUser, q: QuoteQueryDto) {
     const model = await this.getPricingModel(clubId);
     const { court, location } = await this.getCourtWithLocation(
@@ -358,6 +428,15 @@ export class PricingService {
   }
 
   // Loads everything needed once, then prices any number of slots with no further queries
+  /**
+   * Preloads the data needed to price multiple availability slots, then returns
+   * a synchronous priceFor function that performs no additional database reads.
+   * @param clubId Authenticated club UUID.
+   * @param user Authenticated caller; membership pricing depends on role/identity.
+   * @param args Pricing model, location, court IDs, duration, and optional plan/package.
+   * @returns Promise of a `Pricer` with model/membership/note metadata and a
+   * `priceFor(courtId, startMinute)` function returning SlotPrice.
+   */
   async createPricer(
     clubId: string,
     user: AuthUser,
@@ -486,12 +565,22 @@ export class PricingService {
 
   // ---------- Helpers ----------
 
+  /**
+   * Reads the club's immutable pricing model.
+   * @param clubId Club UUID.
+   * @returns Promise of PricingModel; missing club throws HTTP 404.
+   */
   private async getPricingModel(clubId: string): Promise<PricingModel> {
     const tenant = await this.tenantRepo.findOneBy({ id: clubId });
     if (!tenant) throw new NotFoundException('Club not found');
     return tenant.pricingModel;
   }
 
+  /**
+   * Ensures shift configuration is only changed for a shift-priced club.
+   * @param clubId Club UUID.
+   * @returns Promise<void>; membership-priced clubs receive HTTP 409.
+   */
   private async assertShiftBased(clubId: string) {
     if ((await this.getPricingModel(clubId)) !== PricingModel.SHIFT_BASED) {
       throw new ConflictException('This club uses membership-based pricing');
@@ -499,6 +588,12 @@ export class PricingService {
   }
 
   // Tenant check: shift must belong to this club
+  /**
+   * Finds a shift by both id and club id.
+   * @param clubId Authenticated club UUID.
+   * @param id Shift UUID.
+   * @returns Promise of the shift entity, or HTTP 404 when absent/not owned.
+   */
   private async getShift(clubId: string, id: string): Promise<PricingShift> {
     const shift = await this.shiftRepo.findOneBy({ id, clubId });
     if (!shift) throw new NotFoundException('Shift not found');
@@ -506,6 +601,13 @@ export class PricingService {
   }
 
   // Tenant check: location must belong to this club (consumers: active only)
+  /**
+   * Loads a location inside the club and optionally enforces active state for consumers.
+   * @param clubId Authenticated club UUID.
+   * @param id Location UUID.
+   * @param role Optional caller role; consumers cannot access inactive locations.
+   * @returns Promise of the location entity, or HTTP 404 if hidden/not found.
+   */
   private async getLocation(
     clubId: string,
     id: string,
@@ -519,6 +621,13 @@ export class PricingService {
   }
 
   // Tenant check: court and its location must belong to this club
+  /**
+   * Loads a court and its parent location using the same club scope.
+   * @param clubId Authenticated club UUID.
+   * @param courtId Court UUID.
+   * @param role Optional caller role for active-only consumer visibility.
+   * @returns Promise of `{ court, location }`; either unavailable asset returns HTTP 404.
+   */
   private async getCourtWithLocation(
     clubId: string,
     courtId: string,
@@ -532,6 +641,12 @@ export class PricingService {
     return { court, location };
   }
 
+  /**
+   * Parses a shift's HH:mm boundaries to minute offsets and ensures end follows start.
+   * @param startTime Shift start in 24-hour HH:mm format.
+   * @param endTime Shift end in 24-hour HH:mm format.
+   * @returns `{ start, end }` minute offsets, e.g. `{ start: 360, end: 540 }`.
+   */
   private parseRange(startTime: string, endTime: string) {
     const start = toMinutes(startTime);
     const end = toMinutes(endTime);
@@ -540,6 +655,11 @@ export class PricingService {
     return { start, end };
   }
 
+  /**
+   * Trims a shift name and rejects empty/reserved Normal/default names.
+   * @param raw User-provided shift label.
+   * @returns Normalized shift name or HTTP 400 for invalid/reserved names.
+   */
   private cleanShiftName(raw: string): string {
     const name = raw.trim();
     if (!name) throw new BadRequestException('Shift name cannot be empty');
@@ -552,6 +672,16 @@ export class PricingService {
   }
 
   // Name must be unique in the location and the time range must not overlap another shift
+  /**
+   * Ensures a shift name is unique and its proposed time range overlaps no peer shift.
+   * @param clubId Authenticated club UUID.
+   * @param locationId Location UUID containing the shifts.
+   * @param name Normalized shift name.
+   * @param start Proposed start minute.
+   * @param end Proposed exclusive end minute.
+   * @param exceptId Optional shift UUID excluded during its own update.
+   * @returns Promise<void>; duplicate names/ranges throw HTTP 409.
+   */
   private async assertShiftFits(
     clubId: string,
     locationId: string,
@@ -577,12 +707,22 @@ export class PricingService {
     }
   }
 
+  /**
+   * Creates the standard conflict exception for duplicate shift names.
+   * @param name Conflicting name.
+   * @returns ConflictException describing the location-scoped duplicate.
+   */
   private shiftNameTaken(name: string) {
     return new ConflictException(
       `A shift named "${name}" already exists in this location`,
     );
   }
 
+  /**
+   * Serializes a shift and converts minute offsets to HH:mm strings.
+   * @param s PricingShift entity.
+   * @returns `{ id, locationId, name, startTime, endTime }`.
+   */
   private toShiftResponse(s: PricingShift) {
     return {
       id: s.id,

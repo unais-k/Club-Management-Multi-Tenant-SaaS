@@ -1,8 +1,10 @@
+/** Checks that admins can preview active package rates for membership pricing. */
 import { describe, expect, it, vi } from 'vitest';
 import { PricingModel, UserRole } from '../common/enums/index.js';
 import { PricingService } from './pricing.service.js';
 
 describe('PricingService membership availability preview', () => {
+  /** Ensures the pricer returns package quotes without requiring a consumer membership. */
   it('returns active package rates to a club admin without requiring membership', async () => {
     const listPackageQuotes = vi.fn().mockResolvedValue([
       {

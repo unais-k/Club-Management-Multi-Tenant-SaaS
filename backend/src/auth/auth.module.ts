@@ -1,3 +1,7 @@
+/**
+ * NestJS wiring for authentication: registers User/Tenant repositories,
+ * JWT signing support, the auth controller/service, and global auth/role guards.
+ */
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';

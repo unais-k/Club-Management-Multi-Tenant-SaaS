@@ -1,3 +1,8 @@
+/**
+ * Authentication business logic: consumer registration, login, refresh-token
+ * rotation/reuse detection, logout, and retrieval of the current profile.
+ * This is also where credentials are checked and token/session data is stored.
+ */
 import {
   ConflictException,
   ForbiddenException,
@@ -20,6 +25,14 @@ import type { JwtPayload } from './types/jwt-payload.js';
 
 @Injectable()
 export class AuthService {
+  /**
+   * Receives database repositories and JWT/configuration services from NestJS.
+   * @param userRepo Repository for account records and their password/session hashes.
+   * @param tenantRepo Repository used to resolve and check club status.
+   * @param jwtService Signs and verifies access and refresh JWTs.
+   * @param config Reads required secrets and optional token lifetimes from env config.
+   * @returns No value; dependencies are assigned to this service instance.
+   */
   constructor(
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
@@ -28,6 +41,14 @@ export class AuthService {
   ) {}
 
   // ---------- Register (consumers only) ----------
+  /**
+   * Creates a consumer account in an active club. The role is assigned here,
+   * never accepted from the client; the password is stored as a bcrypt hash.
+   * @param dto Club slug, display name, email, and plain-text password that passed DTO validation.
+   * @returns Promise of `{ accessToken, refreshToken, user }`; the profile
+   * includes id, name, normalized email, role, and clubId. Duplicate club/email
+   * pairs produce HTTP 409.
+   */
   async register(dto: RegisterDto) {
     const tenant = await this.getActiveTenantBySlug(dto.clubSlug);
     const email = dto.email.toLowerCase();
@@ -59,6 +80,15 @@ export class AuthService {
   }
 
   // ---------- Login ----------
+  /**
+   * Authenticates an account by normalized email and password. With `clubSlug`
+   * it only searches that active club; without it, it only searches platform
+   * accounts whose clubId is null. A successful login replaces the stored
+   * refresh-token hash, so a user has one active refresh session.
+   * @param dto Email/password and optional club slug provided by the login form.
+   * @returns Promise of `{ accessToken, refreshToken, user }` with a safe
+   * profile; bad credentials produce HTTP 401 and deactivated accounts HTTP 403.
+   */
   async login(dto: LoginDto) {
     const email = dto.email.toLowerCase();
 
@@ -86,6 +116,14 @@ export class AuthService {
   }
 
   // ---------- Refresh (with rotation) ----------
+  /**
+   * Verifies a refresh JWT, confirms it is the currently stored token, checks
+   * account/club status, and issues a fresh pair. Reusing an older refresh token
+   * clears the session hash to end the session.
+   * @param refreshToken The refresh JWT sent by the client, not the access JWT.
+   * @returns Promise of `{ accessToken, refreshToken, user }` containing the
+   * rotated pair and safe profile; invalid/expired/reused tokens produce HTTP 401.
+   */
   async refresh(refreshToken: string) {
     let payload: { sub: string };
     try {
@@ -121,12 +159,24 @@ export class AuthService {
   }
 
   // ---------- Logout ----------
+  /**
+   * Invalidates a user's refresh session by removing its stored token hash.
+   * @param userId Authenticated account UUID, taken from the current access token.
+   * @returns Promise resolving to `{ message: "Logged out" }` after the update.
+   */
   async logout(userId: string) {
     await this.userRepo.update(userId, { refreshTokenHash: null });
     return { message: 'Logged out' };
   }
 
   // ---------- Profile ----------
+  /**
+   * Loads the latest account record and its associated club for the `/auth/me`
+   * response, rather than relying on possibly stale profile data in a JWT.
+   * @param userId Authenticated account UUID, taken from the current access token.
+   * @returns Promise of safe profile fields plus club id/name/slug/pricing model/
+   * timezone, or `club: null` for a platform admin. Missing accounts produce 404.
+   */
   async me(userId: string) {
     const user = await this.userRepo.findOne({
       where: { id: userId },
@@ -149,6 +199,11 @@ export class AuthService {
   }
 
   // ---------- Helpers ----------
+  /**
+   * Finds a club by its public slug and enforces that the club is active.
+   * @param slug Club slug supplied during consumer registration or club login.
+   * @returns The matching active Tenant entity; throws 404 if missing and 403 if inactive.
+   */
   private async getActiveTenantBySlug(slug: string): Promise<Tenant> {
     const tenant = await this.tenantRepo.findOneBy({ slug });
     if (!tenant) throw new NotFoundException('Club not found');
@@ -156,6 +211,13 @@ export class AuthService {
     return tenant;
   }
 
+  /**
+   * Creates an access JWT and a unique refresh JWT, stores only the SHA-256
+   * hash of the refresh JWT, and builds the safe user-profile portion.
+   * @param user Persisted account whose id, role, and club scope go into tokens.
+   * @returns Promise of `{ accessToken, refreshToken, user }`; example:
+   * `{ accessToken: "<jwt>", refreshToken: "<jwt>", user: { id, name, email, role, clubId } }`.
+   */
   private async issueTokens(user: User) {
     const accessPayload: JwtPayload = {
       sub: user.id,
@@ -184,10 +246,22 @@ export class AuthService {
     return { accessToken, refreshToken, user: this.toProfile(user) };
   }
 
+  /**
+   * Produces a one-way SHA-256 digest so the database never stores the raw
+   * refresh token. This digest is compared during refresh-token rotation.
+   * @param token Raw signed refresh JWT.
+   * @returns Lowercase hexadecimal SHA-256 digest string, never the input token.
+   */
   private hashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
   }
 
+  /**
+   * Removes password/session secrets and selects only client-safe account fields.
+   * @param user Account entity loaded from the database.
+   * @returns `{ id, name, email, role, clubId }`; for example
+   * `{ id: "<uuid>", name: "Aisha Khan", email: "aisha@example.com", role: "consumer", clubId: "<uuid>" }`.
+   */
   private toProfile(user: User) {
     return {
       id: user.id,

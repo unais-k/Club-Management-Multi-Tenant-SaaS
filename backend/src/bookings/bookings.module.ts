@@ -1,3 +1,8 @@
+/**
+ * Nest wiring for bookings. Registers booking/facility repositories, imports
+ * pricing support, exposes the booking routes/service, and starts the database
+ * overlap-constraint initializer.
+ */
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Court } from '../courts/entities/court.entity.js';

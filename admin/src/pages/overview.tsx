@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BadgeCheck,
   Building2,
@@ -45,7 +45,7 @@ export function OverviewPage() {
   >([]);
   const isPlatform = user?.role === "PLATFORM_ADMIN";
 
-  const load = useCallback(async () => {
+  async function load() {
     setLoading(true);
     setError("");
     try {
@@ -130,11 +130,11 @@ export function OverviewPage() {
     } finally {
       setLoading(false);
     }
-  }, [isPlatform, user?.club?.pricingModel]);
+  }
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [isPlatform, user?.club?.pricingModel]);
 
   return (
     <div className="space-y-5">

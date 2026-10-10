@@ -1,3 +1,8 @@
+/**
+ * Availability orchestration service. Loads one club/location day's data,
+ * filters eligible courts, preloads pricing once, and combines it with the pure
+ * availability engine to return consumer/admin bookable slots.
+ */
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -20,6 +25,7 @@ import {
 import { evaluateBookingDate } from './booking-window.js';
 import { AvailabilityQueryDto } from './dto/availability-query.dto.js';
 
+/** Converts a stored minute-offset range into the availability engine shape. */
 const toRange = (r: { startMinute: number; endMinute: number }): MinuteRange => ({
   start: r.startMinute,
   end: r.endMinute,
@@ -27,6 +33,15 @@ const toRange = (r: { startMinute: number; endMinute: number }): MinuteRange => 
 
 @Injectable()
 export class AvailabilityService {
+  /**
+   * @param tenantRepo Loads club timezone and pricing model.
+   * @param locationRepo Loads the selected club location and weekly hours.
+   * @param courtRepo Loads active courts and custom schedules.
+   * @param periodRepo Loads one-date location closures.
+   * @param bookingRepo Loads confirmed bookings for the requested day.
+   * @param pricingService Preloads applicable prices and provides slot quote calculation.
+   * @returns No value; Nest injects repositories and service dependencies.
+   */
   constructor(
     @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
     @InjectRepository(Location) private readonly locationRepo: Repository<Location>,
@@ -37,6 +52,16 @@ export class AvailabilityService {
     private readonly pricingService: PricingService,
   ) {}
 
+  /**
+   * Calculates bookable slots for every eligible court at one location/date.
+   * Consumers see active assets and their assigned membership package pricing;
+   * Club Admins can preview package prices.
+   * @param clubId Authenticated club UUID used to scope every database query.
+   * @param user Authenticated caller/role used for visibility and price resolution.
+   * @param q Location, club-local date, duration, and optional admin plan/package selectors.
+   * @returns Promise of `{ locationId, locationName, date, dayOfWeek, durationMinutes,
+   * timezone, notice, pricing, courts }`, with each court containing available slots.
+   */
   async getAvailability(clubId: string, user: AuthUser, q: AvailabilityQueryDto) {
     // 1. Club (timezone + pricing model)
     const tenant = await this.tenantRepo.findOneBy({ id: clubId });

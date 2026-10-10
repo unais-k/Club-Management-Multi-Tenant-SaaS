@@ -1,3 +1,8 @@
+/**
+ * Consolidated initial PostgreSQL schema migration. It creates the application
+ * tables, enum types, indexes, checks, foreign keys, and booking overlap
+ * exclusion constraint; its down method removes the schema in reverse order.
+ */
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 // Kept as ordered migration classes in one source file so databases that already
@@ -6,6 +11,11 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 export class InitialSchema1791442532556 implements MigrationInterface {
     name = 'InitialSchema1791442532556'
 
+    /**
+     * Applies the complete initial schema to the connected database.
+     * @param queryRunner TypeORM runner used to execute ordered PostgreSQL DDL.
+     * @returns Promise<void> after every table/index/constraint statement succeeds.
+     */
     public async up(queryRunner: QueryRunner): Promise<void> {
         // These extensions provide uuid_generate_v4() and the GiST equality
         // operators used by the booking overlap constraint below.
@@ -63,6 +73,11 @@ export class InitialSchema1791442532556 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "court_prices" ADD CONSTRAINT "FK_2f4badb7efeb988f27043fca021" FOREIGN KEY ("shiftId") REFERENCES "pricing_shifts"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
     }
 
+    /**
+     * Reverts the initial schema in dependency-safe reverse order.
+     * @param queryRunner TypeORM runner used to execute PostgreSQL DDL.
+     * @returns Promise<void> after schema objects are removed.
+     */
     public async down(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`ALTER TABLE "court_prices" DROP CONSTRAINT "FK_2f4badb7efeb988f27043fca021"`);
         await queryRunner.query(`ALTER TABLE "court_prices" DROP CONSTRAINT "FK_a82a5c0dee1b7de23eb90afd6f9"`);

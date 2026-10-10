@@ -1,3 +1,4 @@
+/** Tests free-window arithmetic, slot generation, and availability block reasons. */
 import { describe, expect, it } from 'vitest';
 import { toMinutes as m } from '../common/helpers/time.js';
 import {

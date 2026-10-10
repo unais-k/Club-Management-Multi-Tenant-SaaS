@@ -1,3 +1,9 @@
+/**
+ * Development/demo database seed script. Creates one shift-priced club and one
+ * membership-priced club with admins, consumers, locations, courts, schedules,
+ * prices, sample bookings, packages, assignments, and demo receipts. Use --reset
+ * only when intentionally clearing a non-production database.
+ */
 import bcrypt from 'bcryptjs';
 import type { EntityManager } from 'typeorm';
 import { Booking } from '../bookings/entities/booking.entity.js';
@@ -27,12 +33,15 @@ const WEEKEND = [0, 6];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Price for a duration, scaled from the 60-minute price (rounded to cents)
+/** Scales a 60-minute price proportionally to another duration and rounds cents. */
 const scale = (price60: number, minutes: number) =>
   Math.round(((price60 * minutes) / 60) * 100) / 100;
 
+/** Builds one minute-offset opening-hours row per supplied weekday. */
 const weeklyRows = (days: number[], open: string, close: string) =>
   days.map((dayOfWeek) => ({ dayOfWeek, startMinute: t(open), endMinute: t(close) }));
 
+/** Persists one seeded account with the supplied club, role, and pre-hashed password. */
 const makeUser = (
   m: EntityManager,
   clubId: string | null,
@@ -45,6 +54,7 @@ const makeUser = (
 // ---------------------------------------------------------------------------
 // Club 1: SHIFT_BASED
 // ---------------------------------------------------------------------------
+/** Seeds the shift-priced demo club and its locations, courts, shifts, prices, and bookings. */
 async function seedShiftClub(m: EntityManager, passwordHash: string) {
   const timezone = 'Asia/Kolkata';
   const club = await m.save(
@@ -123,6 +133,7 @@ async function seedShiftClub(m: EntityManager, passwordHash: string) {
     m.create(PricingShift, { clubId, locationId: center.id, name: 'Evening Peak', startMinute: t('19:00'), endMinute: t('23:00') }),
   );
 
+  /** Builds Normal/morning/evening price rows by scaling each duration from 60 minutes. */
   const priceRows = (courtId: string, durations: number[], morning60: number, normal60: number, evening60: number) =>
     durations.flatMap((d) => [
       { clubId, courtId, shiftId: morning.id, durationMinutes: d, price: scale(morning60, d) },
@@ -161,6 +172,7 @@ async function seedShiftClub(m: EntityManager, passwordHash: string) {
 
   // ----- Bookings (times are valid on every weekday and weekend day) -----
   const today = nowInTimezone(timezone).date;
+  /** Creates a complete seeded booking object for one court/user/date/time. */
   const booking = (
     courtId: string,
     userId: string,
@@ -195,6 +207,7 @@ async function seedShiftClub(m: EntityManager, passwordHash: string) {
 // ---------------------------------------------------------------------------
 // Club 2: MEMBERSHIP_BASED
 // ---------------------------------------------------------------------------
+/** Seeds the package-priced demo club, plans/options, assignment/payment history, and member bookings. */
 async function seedMembershipClub(m: EntityManager, passwordHash: string) {
   const timezone = 'Asia/Dubai';
   const club = await m.save(
@@ -283,6 +296,7 @@ async function seedMembershipClub(m: EntityManager, passwordHash: string) {
   }
 
   const now = new Date();
+  /** Creates a seeded member/package assignment and its matching payment record. */
   const createAssignment = async (
     user: User,
     plan: Membership,
@@ -347,6 +361,7 @@ async function seedMembershipClub(m: EntityManager, passwordHash: string) {
   );
 
   const today = nowInTimezone(timezone).date;
+  /** Creates a seeded booking attached to Lena's membership assignment. */
   const booking = (date: string, start: string, minutes: number, price: number) => ({
     clubId,
     locationId: lakeside.id,
@@ -370,6 +385,7 @@ async function seedMembershipClub(m: EntityManager, passwordHash: string) {
 }
 
 // ---------------------------------------------------------------------------
+/** Initializes the CLI DataSource, optionally resets data, and seeds demo records idempotently. */
 async function main() {
   const reset = process.argv.includes('--reset');
   if (reset && process.env.NODE_ENV === 'production') {

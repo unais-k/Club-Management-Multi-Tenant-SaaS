@@ -1,3 +1,7 @@
+/**
+ * TypeORM mapping for a club-owned physical location. Stores its bookable
+ * durations and links to weekly opening hours and date-specific closures.
+ */
 import {
     Column,
     CreateDateColumn,

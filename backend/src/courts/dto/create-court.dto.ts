@@ -1,3 +1,7 @@
+/**
+ * Validated request body for adding a court to a location. Durations, when
+ * supplied, must be a subset of that location's configured durations.
+ */
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
@@ -12,18 +16,21 @@ import {
 } from 'class-validator';
 
 export class CreateCourtDto {
+  /** Court display name, unique within the parent location. */
   @ApiProperty({ example: 'Court 1' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(150)
   name: string;
 
+  /** Optional details displayed with the court. */
   @ApiPropertyOptional({ example: 'Indoor, glass walls' })
   @IsOptional()
   @IsString()
   @MaxLength(2000)
   description?: string;
 
+  /** Optional duration subset; omitted or null on update means inherit location durations. */
   @ApiPropertyOptional({
     type: [Number],
     nullable: true,

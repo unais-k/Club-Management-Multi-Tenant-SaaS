@@ -1,9 +1,14 @@
+/**
+ * Validated body for choosing inherited location hours or replacing a court's
+ * complete custom weekly schedule.
+ */
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsBoolean, IsOptional, ValidateNested } from 'class-validator';
 import { OpeningHourDto } from '../../locations/dto/set-opening-hours.dto.js';
 
 export class SetCourtOpeningHoursDto {
+  /** True clears custom rows and makes the court follow its location's hours. */
   @ApiProperty({
     example: false,
     description: 'true = follow the location hours (clears custom hours)',
@@ -11,6 +16,7 @@ export class SetCourtOpeningHoursDto {
   @IsBoolean()
   useLocationHours: boolean;
 
+  /** Required when useLocationHours is false; unlisted days are closed. */
   @ApiPropertyOptional({
     type: () => [OpeningHourDto],
     description:
