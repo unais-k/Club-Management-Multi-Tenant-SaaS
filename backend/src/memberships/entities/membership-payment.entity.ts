@@ -14,10 +14,10 @@ import { decimalTransformer } from '../../common/helpers/decimal.transformer.js'
 import { UserMembership } from './user-membership.entity.js';
 
 /** Status values for the local payment/receipt flow. */
-export type MembershipPaymentStatus = 'PENDING' | 'SIMULATED_PAID';
+export type MembershipPaymentStatus = 'PENDING' | 'PAID';
 
 /**
- * TypeORM mapping for the demo checkout record and printable receipt attached
+ * TypeORM mapping for the local payment confirmation record and printable receipt attached
  * one-to-one to a consumer's membership-package assignment.
  */
 @Entity('membership_payments')
@@ -29,7 +29,7 @@ export type MembershipPaymentStatus = 'PENDING' | 'SIMULATED_PAID';
 )
 @Check(
   'CHK_membership_payment_state',
-  `("status" = 'PENDING' AND "method" IS NULL AND "paidAt" IS NULL) OR ("status" = 'SIMULATED_PAID' AND "method" = 'DEMO' AND "paidAt" IS NOT NULL)`,
+  `("status" = 'PENDING' AND "method" IS NULL AND "paidAt" IS NULL) OR ("status" = 'PAID' AND "method" = 'ONLINE' AND "paidAt" IS NOT NULL)`,
 )
 export class MembershipPayment {
   @PrimaryGeneratedColumn('uuid')
@@ -62,7 +62,7 @@ export class MembershipPayment {
   status: MembershipPaymentStatus;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
-  method: 'DEMO' | null;
+  method: 'ONLINE' | null;
 
   @Column({ type: 'timestamptz', nullable: true })
   paidAt: Date | null;

@@ -324,8 +324,8 @@ async function seedMembershipClub(m: EntityManager, passwordHash: string) {
         userId: user.id,
         userMembershipId: assignment.id,
         amount: packageFee,
-        status: paidAt ? 'SIMULATED_PAID' : 'PENDING',
-        method: paidAt ? 'DEMO' : null,
+        status: paidAt ? 'PAID' : 'PENDING',
+        method: paidAt ? 'ONLINE' : null,
         paidAt,
       }),
     );

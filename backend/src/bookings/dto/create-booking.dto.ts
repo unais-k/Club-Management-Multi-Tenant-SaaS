@@ -1,7 +1,3 @@
-/**
- * Validated JSON body for creating a court booking. The client selects a court,
- * date, start, and duration; the server determines availability and price.
- */
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsInt, IsNumber, IsOptional, IsUUID, Matches, Max, Min } from 'class-validator';
 import { TIME_PATTERN } from '../../common/helpers/time.js';

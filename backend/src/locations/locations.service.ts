@@ -228,14 +228,6 @@ export class LocationsService {
 
   // ---------- Opening hours ----------
 
-  /**
-   * Replaces the complete weekly schedule after validating time ranges, duplicate
-   * overlaps, minimum weekly slots, and all active/custom court schedules.
-   * @param clubId Authenticated club UUID.
-   * @param id Location UUID whose schedule is replaced.
-   * @param dto Complete set of weekly opening periods; omitted days are closed.
-   * @returns Promise of the location response with saved opening hours.
-   */
   async setOpeningHours(clubId: string, id: string, dto: SetOpeningHoursDto) {
     const location = await this.getOwned(clubId, id);
 
@@ -300,14 +292,6 @@ export class LocationsService {
 
   // ---------- Unavailable periods ----------
 
-  /**
-   * Adds a one-date closure period after checking the date/time range, overlap
-   * with other closures, and conflict with existing confirmed bookings.
-   * @param clubId Authenticated club UUID.
-   * @param id Location UUID receiving the closure.
-   * @param dto Local date, start/end times, and optional reason.
-   * @returns Promise of `{ id, date, startTime, endTime, durationMinutes, reason }`.
-   */
   async addUnavailablePeriod(
     clubId: string,
     id: string,
@@ -370,12 +354,7 @@ export class LocationsService {
     return this.toPeriodResponse(period);
   }
 
-  /**
-   * Lists all date-specific closure periods for one club-owned location.
-   * @param clubId Authenticated club UUID.
-   * @param id Location UUID whose closures are requested.
-   * @returns Promise of closure response objects sorted by date then start time.
-   */
+
   async listUnavailablePeriods(clubId: string, id: string) {
     const location = await this.getOwned(clubId, id);
     const periods = await this.periodRepo.find({
@@ -385,13 +364,6 @@ export class LocationsService {
     return periods.map((p) => this.toPeriodResponse(p));
   }
 
-  /**
-   * Deletes one closure only when it belongs to the requested club and location.
-   * @param clubId Authenticated club UUID.
-   * @param id Parent location UUID.
-   * @param periodId Unavailable-period UUID to delete.
-   * @returns Promise<void>; throws HTTP 404 if the period is not under that location.
-   */
   async removeUnavailablePeriod(clubId: string, id: string, periodId: string) {
     const location = await this.getOwned(clubId, id);
     const result = await this.periodRepo.delete({
@@ -406,12 +378,6 @@ export class LocationsService {
   // ---------- Helpers ----------
 
   // THE tenant check: id AND clubId must both match, otherwise 404
-  /**
-   * Loads a location by both primary key and club id, including weekly hours.
-   * @param clubId Authenticated club UUID.
-   * @param id Location UUID requested.
-   * @returns Promise of the owned Location entity, or HTTP 404 if not owned/found.
-   */
   private async getOwned(clubId: string, id: string): Promise<Location> {
     const location = await this.locationRepo.findOne({
       where: { id, clubId },
@@ -421,14 +387,7 @@ export class LocationsService {
     return location;
   }
 
-  /**
-   * Checks that a location name is unique within a club, allowing the current
-   * row during an update when `exceptId` matches.
-   * @param clubId Club UUID that defines the uniqueness scope.
-   * @param name Trimmed location name to check.
-   * @param exceptId Optional location UUID excluded from the collision check.
-   * @returns Promise<void>; throws the standard HTTP 409 name-conflict error.
-   */
+
   private async assertNameFree(
     clubId: string,
     name: string,

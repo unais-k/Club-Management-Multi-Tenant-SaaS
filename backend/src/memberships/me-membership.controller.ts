@@ -1,6 +1,6 @@
 /**
  * Consumer-only routes for viewing personal membership assignments and
- * confirming the demo package payment that unlocks booking access.
+ * confirming package payment that unlocks booking access.
  */
 import { Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import {
@@ -23,7 +23,7 @@ import { MembershipsService } from './memberships.service.js';
 @Controller('me/membership')
 export class MeMembershipController {
   /**
-   * @param membershipsService Loads assignments and confirms demo receipts.
+   * @param membershipsService Loads assignments and confirms payment receipts.
    * @returns No value; Nest injects the service into this controller.
    */
   constructor(private readonly membershipsService: MembershipsService) { }
@@ -48,7 +48,7 @@ export class MeMembershipController {
   @ApiOperation({
     summary: 'Confirm payment for an assigned membership package',
     description:
-      'Marks the package fee as SIMULATED_PAID and returns a printable receipt. This is a flow only: no payment provider is called and no money is collected.',
+      'Marks the package fee as PAID and returns a printable receipt. This is a local flow only: no payment provider is called and no money is collected.',
   })
   @ApiCreatedResponse({ description: 'payment recorded with a receipt.' })
   @ApiConflictResponse({ description: 'The assignment was cancelled or its package is unavailable.' })

@@ -1,7 +1,3 @@
-/**
- * Nest module wiring for court management. Registers court/location repositories,
- * imports booking-protection services, and exposes the court controller/service.
- */
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Location } from '../locations/entities/location.entity.js';

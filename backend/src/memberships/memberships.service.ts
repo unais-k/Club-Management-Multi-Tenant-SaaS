@@ -629,7 +629,7 @@ export class MembershipsService {
   }
 
   /**
-   * Records the consumer's demo checkout as SIMULATED_PAID, starts immediate
+   * Records the consumer's checkout as PAID, starts immediate
    * assignments at confirmation time, and returns membership data plus a receipt.
    * No external payment gateway or money movement is involved.
    * @param clubId Authenticated club UUID.
@@ -656,7 +656,7 @@ export class MembershipsService {
           lock: { mode: 'pessimistic_write' },
         });
         if (!payment) throw new NotFoundException('Membership payment not found');
-        if (payment.status === 'SIMULATED_PAID') return { assignment, payment };
+        if (payment.status === 'PAID') return { assignment, payment };
 
         const membershipPackage = assignment.packageId
           ? await manager.findOne(MembershipPackage, {
@@ -675,8 +675,8 @@ export class MembershipsService {
           );
         }
         assignment.paidAt = now;
-        payment.status = 'SIMULATED_PAID';
-        payment.method = 'DEMO';
+        payment.status = 'PAID';
+        payment.method = 'ONLINE';
         payment.paidAt = now;
 
         await manager.save(MembershipPayment, payment);
@@ -1233,7 +1233,7 @@ export class MembershipsService {
       status: payment.status as MembershipPaymentStatus,
       method: payment.method,
       paidAt: payment.paidAt,
-      simulated: payment.status === 'SIMULATED_PAID',
+      simulated: payment.status === 'PAID',
     };
   }
 }

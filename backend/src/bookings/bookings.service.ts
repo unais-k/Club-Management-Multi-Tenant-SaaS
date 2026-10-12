@@ -1,8 +1,3 @@
-/**
- * Booking domain service. It validates and creates bookings with server-calculated
- * pricing, row locks and overlap protection; enforces club/user visibility;
- * supports cancellation and provides booking counts to facility protection logic.
- */
 import {
     BadRequestException,
     ConflictException,
@@ -39,11 +34,6 @@ import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { BookingPeriod, ListBookingsQueryDto } from './dto/list-bookings-query.dto.js';
 import { Booking } from './entities/booking.entity.js';
 
-/**
- * Converts a persisted minute range into the availability engine's range shape.
- * @param r Object containing inclusive start and exclusive end minute offsets.
- * @returns `{ start, end }`, e.g. `{ start: 480, end: 540 }` for 08:00–09:00.
- */
 const toRange = (r: { startMinute: number; endMinute: number }): MinuteRange => ({
     start: r.startMinute,
     end: r.endMinute,
@@ -51,15 +41,6 @@ const toRange = (r: { startMinute: number; endMinute: number }): MinuteRange => 
 
 @Injectable()
 export class BookingsService {
-    /**
-     * @param bookingRepo Reads/writes booking records and builds filtered queries.
-     * @param tenantRepo Resolves the club timezone and pricing configuration.
-     * @param courtRepo Loads and locks courts before booking insertion.
-     * @param locationRepo Loads the court's owning location and opening hours.
-     * @param pricingService Calculates authoritative server-side booking prices.
-     * @param dataSource runs the atomic booking transaction.
-     * @returns No value; Nest injects dependencies into the service instance.
-     */
     constructor(
         @InjectRepository(Booking) private readonly bookingRepo: Repository<Booking>,
         @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
@@ -71,18 +52,6 @@ export class BookingsService {
 
     // ---------- Create ----------
 
-    /**
-     * Validates a booking request, calculates its price, rechecks live availability
-     * while holding the court lock, verifies membership quota when applicable,
-     * and inserts the confirmed booking in one transaction.
-     * @param clubId Authenticated tenant UUID; all queried rows are scoped to it.
-     * @param user Authenticated consumer identity and role; user.id owns the booking.
-     * @param dto Court UUID, local booking date, start time, duration, and optional
-     * expectedPrice used to reject a stale quote.
-     * @returns Promise of the API booking response, e.g. `{ id, status: "CONFIRMED",
-     * date, startTime, endTime, durationMinutes, price, pricingModel, court, location, canCancel }`.
-     * Availability, price, or quota conflicts throw an HTTP exception instead.
-     */
     async create(clubId: string, user: AuthUser, dto: CreateBookingDto) {
         const tenant = await this.getTenant(clubId);
 
@@ -270,17 +239,7 @@ export class BookingsService {
 
     // ---------- Read ----------
 
-    /**
-     * Queries visible bookings with filters, ordering, and pagination. Consumers
-     * are always restricted to their own rows; club admins can see club-wide rows.
-     * @param clubId Authenticated club UUID that scopes every query.
-     * @param user Authenticated caller; role determines visibility and whether
-     * consumer details are included in each response.
-     * @param q Validated filters for status, period, location, court, date range,
-     * and pagination.
-     * @returns Promise of `{ data, meta }`; meta is `{ total, page, limit,
-     * totalPages }`, and data contains formatted booking responses.
-     */
+
     async findAll(clubId: string, user: AuthUser, q: ListBookingsQueryDto) {
         for (const d of [q.dateFrom, q.dateTo]) {
             if (d && !isRealDate(d)) throw new BadRequestException(`"${d}" is not a valid date`);
@@ -335,13 +294,6 @@ export class BookingsService {
         };
     }
 
-    /**
-     * Loads and formats one booking after enforcing club scope and consumer ownership.
-     * @param clubId Authenticated club UUID.
-     * @param user Authenticated caller, used to apply ownership checks and response visibility.
-     * @param id Booking UUID requested by the client.
-     * @returns Promise of one formatted booking response, or HTTP 404 if not visible.
-     */
     async findOne(clubId: string, user: AuthUser, id: string) {
         const tenant = await this.getTenant(clubId);
         const booking = await this.getVisible(clubId, user, id);
@@ -355,16 +307,6 @@ export class BookingsService {
 
     // ---------- Cancel ----------
 
-    /**
-     * Cancels a confirmed booking more than 30 minutes before its start. The
-     * conditional database update prevents concurrent requests from cancelling
-     * it twice; cancelled membership bookings no longer consume a credit.
-     * @param clubId Authenticated club UUID.
-     * @param user Authenticated caller whose visibility/ownership is checked.
-     * @param id Booking UUID to cancel.
-     * @returns Promise of the updated formatted booking response; already
-     * cancelled, started, or near-start bookings throw HTTP 409.
-     */
     async cancel(clubId: string, user: AuthUser, id: string) {
         const tenant = await this.getTenant(clubId);
         const booking = await this.getVisible(clubId, user, id); // 404 if not ours / not visible
@@ -399,13 +341,6 @@ export class BookingsService {
 
     // ---------- Used by courts and locations to protect existing bookings ----------
 
-    /**
-     * Counts confirmed bookings that have not ended yet, optionally within a
-     * court or location. Used to prevent edits that would invalidate bookings.
-     * @param clubId Authenticated club UUID to scope the count.
-     * @param scope Optional courtId and/or locationId filter.
-     * @returns Promise of the matching booking count as a number.
-     */
     async countUpcoming(clubId: string, scope: { courtId?: string; locationId?: string }) {
         const tenant = await this.getTenant(clubId);
         const today = nowInTimezone(tenant.timezone);
@@ -425,15 +360,6 @@ export class BookingsService {
         return qb.getCount();
     }
 
-    /**
-     * Counts confirmed bookings at a location that overlap a proposed minute range.
-     * @param clubId Authenticated club UUID to scope the query.
-     * @param locationId Location UUID to check.
-     * @param date Local YYYY-MM-DD booking date.
-     * @param startMinute Proposed start offset from midnight.
-     * @param endMinute Proposed exclusive end offset from midnight.
-     * @returns Promise of the number of overlapping confirmed bookings.
-     */
     async countOverlapping(
         clubId: string,
         locationId: string,
@@ -456,11 +382,6 @@ export class BookingsService {
 
     // ---------- Helpers ----------
 
-    /**
-     * Loads a club record used to determine timezone and pricing settings.
-     * @param clubId Club UUID from the authenticated request.
-     * @returns Promise of the Tenant entity; throws HTTP 404 if missing.
-     */
     private async getTenant(clubId: string): Promise<Tenant> {
         const tenant = await this.tenantRepo.findOneBy({ id: clubId });
         if (!tenant) throw new NotFoundException('Club not found');
@@ -468,15 +389,6 @@ export class BookingsService {
     }
 
     // Tenant check: club_id must match; consumers can additionally only see their own
-    /**
-     * Loads a booking only within the requested club and, for consumers, only
-     * when owned by that consumer. Soft-deleted facility relations are retained.
-     * @param clubId Authenticated club UUID.
-     * @param user Authenticated caller whose role/id determine row visibility.
-     * @param id Booking UUID to retrieve.
-     * @returns Promise of booking with court/location/user relations; HTTP 404
-     * hides both nonexistent and unauthorized booking IDs.
-     */
     private async getVisible(clubId: string, user: AuthUser, id: string): Promise<Booking> {
         const booking = await this.bookingRepo.findOne({
             where: {
@@ -491,12 +403,6 @@ export class BookingsService {
         return booking;
     }
 
-    /**
-     * Maps an availability-engine block reason to the corresponding HTTP error.
-     * @param reason Stable reason code returned by findBlockingReason.
-     * @returns A ConflictException for a raced booking or UnprocessableEntityException
-     * for closed/unavailable hours.
-     */
     private blockedError(reason: BlockReason) {
         switch (reason) {
             case 'ALREADY_BOOKED':
@@ -512,16 +418,6 @@ export class BookingsService {
         }
     }
 
-    /**
-     * Shapes a booking entity into the public API response and computes whether
-     * it can still be cancelled at the supplied instant.
-     * @param b Booking entity, optionally with court/location/user relations loaded.
-     * @param timeZone Club timezone used to evaluate local start/cancellation rules.
-     * @param now Current instant, passed in so list results share one consistent time.
-     * @param includeUser Whether a club-admin response may include consumer details.
-     * @returns Plain response object with booking/time/price/facility fields, canCancel,
-     * cancellation/creation timestamps, and optional user data.
-     */
     private toResponse(b: Booking, timeZone: string, now: Date, includeUser: boolean) {
         return {
             id: b.id,

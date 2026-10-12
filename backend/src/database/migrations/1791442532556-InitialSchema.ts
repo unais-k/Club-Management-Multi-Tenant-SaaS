@@ -290,7 +290,7 @@ export class MembershipPackageDemoPayments1791700000000
         CONSTRAINT "CHK_membership_payment_state" CHECK (
           ("status" = 'PENDING' AND "method" IS NULL AND "paidAt" IS NULL)
           OR
-          ("status" = 'SIMULATED_PAID' AND "method" = 'DEMO' AND "paidAt" IS NOT NULL)
+          ("status" = 'PAID' AND "method" = 'ONLINE' AND "paidAt" IS NOT NULL)
         ),
         CONSTRAINT "FK_membership_payment_assignment" FOREIGN KEY ("userMembershipId")
           REFERENCES "user_memberships"("id") ON DELETE RESTRICT ON UPDATE NO ACTION,

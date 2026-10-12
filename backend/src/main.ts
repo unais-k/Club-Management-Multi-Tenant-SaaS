@@ -1,8 +1,3 @@
-/**
- * Backend process entry point. Creates the Nest application, installs global
- * request/error handling and validation, configures CORS and Swagger, then
- * starts listening on the configured HTTP port.
- */
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
@@ -11,27 +6,17 @@ import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor.js';
 
-/**
- * Builds and starts the HTTP server using the root AppModule.
- * @returns Promise<void>; resolves after the server begins listening. Startup
- * configuration errors reject the promise and prevent the API from starting.
- */
-async function bootstrap() {
+async function maints() {
   const app = await NestFactory.create(AppModule, {
-    // Verbose Nest logs: shows InstanceLoader / RoutesResolver / RouterExplorer
-    // so you can see which modules load and which routes they own at boot.
     logger: ['log', 'error', 'warn', 'debug', 'verbose'],
   });
 
   const config = app.get(ConfigService);
 
-  // ---- Global interceptor: logs Controller.method() per request ----
   app.useGlobalInterceptors(new LoggingInterceptor());
 
-  // ---- Global exception filter: normalizes all errors ----
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // ---- CORS: only admin panel + consumer site may call from a browser ----
   const origins = (
     config.get<string>('CORS_ORIGINS') ??
     'http://localhost:5173,http://localhost:3001'
@@ -42,7 +27,6 @@ async function bootstrap() {
 
   app.enableCors({ origin: origins, credentials: true });
 
-  // ---- Global validation ----
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -51,7 +35,6 @@ async function bootstrap() {
     }),
   );
 
-  // ---- Swagger ----
   const swagger = new DocumentBuilder()
     .setTitle('Club Management API')
     .setDescription(
@@ -71,13 +54,11 @@ async function bootstrap() {
     .build();
 
   SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, swagger), {
-    // keeps your token after a page refresh
     swaggerOptions: { persistAuthorization: true },
   });
 
-  // ---- Listen ----
   const port = Number(config.get('PORT') ?? 3000);
   await app.listen(port);
 }
 
-bootstrap();
+maints();

@@ -1,6 +1,6 @@
 /**
- * Nest interceptor that logs the controller method when a request enters and
- * logs elapsed handler time when its returned observable emits successfully.
+ * Nest interceptor that logs one line per successful request: method, URL and
+ * response status code, after the route handler has returned.
  */
 import {
   Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger,
@@ -12,28 +12,19 @@ export class LoggingInterceptor implements NestInterceptor {
   private readonly logger = new Logger('Route');
 
   /**
-   * Logs the matched controller/method and measures time around the handler observable.
-   * @param ctx Nest execution context used to read controller, handler, and HTTP request.
+   * Wraps the route handler and logs the request once its response is emitted.
+   * @param ctx Nest execution context used to read the HTTP request and response.
    * @param next Handler wrapper that invokes the route and returns its response observable.
-   * @returns The same response observable, with a completion log added by `tap`.
+   * @returns The same response observable, with a log line added by `tap`.
    */
-  intercept(ctx: ExecutionContext, next: CallHandler): Observable<any> {
-    const handler = ctx.getHandler();
-    const controller = ctx.getClass();
-    const req = ctx.switchToHttp().getRequest();
-
-    const start = Date.now();
-    this.logger.log(
-      `--> ${controller.name}.${handler.name}() ${req.method} ${req.url}`,
-    );
+  intercept(ctx: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const http = ctx.switchToHttp();
+    const req = http.getRequest();
+    const res = http.getResponse();
 
     return next.handle().pipe(
-      /** Logs elapsed time after a successful response value is emitted. */
-      tap(() =>
-        this.logger.log(
-          `<-- ${controller.name}.${handler.name}() done in ${Date.now() - start}ms`,
-        ),
-      ),
+      /** Logs `METHOD URL STATUS` after a successful response value is emitted. */
+      tap(() => this.logger.log(`${req.method} ${req.originalUrl} ${res.statusCode}`)),
     );
   }
 }

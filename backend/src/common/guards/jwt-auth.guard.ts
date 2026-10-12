@@ -1,8 +1,3 @@
-/**
- * Global authentication guard. Allows @Public routes; otherwise verifies the
- * bearer access JWT, reloads account/club status from the database, and attaches
- * a trusted AuthUser object to the HTTP request for downstream handlers.
- */
 import {
   type CanActivate,
   type ExecutionContext,
@@ -22,13 +17,6 @@ import type { AuthUser } from '../types/auth-user.js';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  /**
-   * @param reflector Reads @Public metadata on the route/controller.
-   * @param jwtService Verifies the access-token signature and expiration.
-   * @param config Supplies the JWT access-token secret.
-   * @param userRepo Reloads the account and club state from the database.
-   * @returns No value; Nest injects these dependencies into the guard instance.
-   */
   constructor(
     private readonly reflector: Reflector,
     private readonly jwtService: JwtService,
@@ -36,12 +24,6 @@ export class JwtAuthGuard implements CanActivate {
     @InjectRepository(User) private readonly userRepo: Repository<User>,
   ) {}
 
-  /**
-   * Decides whether the current request may reach its route handler.
-   * @param context Nest execution context containing handler, controller, and HTTP request.
-   * @returns `true` for public routes or a valid active account; throws 401 for
-   * absent/invalid credentials and 403 when the account's club is inactive.
-   */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     // 1. Routes marked @Public() skip authentication
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [

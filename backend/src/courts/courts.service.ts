@@ -1,7 +1,3 @@
-/**
- * Court business logic: tenant-scoped court CRUD, duration inheritance, custom
- * weekly hours, schedule validation, and protection of existing bookings.
- */
 import {
   BadRequestException,
   ConflictException,
@@ -33,13 +29,6 @@ import { BookingsService } from '../bookings/bookings.service.js';
 
 @Injectable()
 export class CourtsService {
-  /**
-   * @param courtRepo Reads and writes courts and their custom opening hours.
-   * @param locationRepo Loads owning locations and their hours/durations.
-   * @param dataSource applies court-hours replacements atomically.
-   * @param bookingsService rejects court deletion while future bookings exist.
-   * @returns No value; Nest injects these dependencies into this service.
-   */
   constructor(
     @InjectRepository(Court) private readonly courtRepo: Repository<Court>,
     @InjectRepository(Location)
@@ -48,14 +37,6 @@ export class CourtsService {
     private readonly bookingsService: BookingsService,
   ) {}
 
-  /**
-   * Creates a court in a club-owned location, validating its name, duration
-   * subset, and existence of weekly slots when location hours are configured.
-   * @param clubId Authenticated club UUID that owns the location and court.
-   * @param locationId Parent location UUID.
-   * @param dto Court name, optional description, and optional duration subset.
-   * @returns Promise of formatted court details with effective hours/durations.
-   */
   async create(clubId: string, locationId: string, dto: CreateCourtDto) {
     const location = await this.getLocation(clubId, locationId);
     const name = dto.name.trim();
@@ -87,13 +68,6 @@ export class CourtsService {
     }
   }
 
-  /**
-   * Lists courts in one location, hiding inactive locations/courts from consumers.
-   * @param clubId Authenticated club UUID.
-   * @param role Caller role, used to apply consumer visibility rules.
-   * @param locationId Parent location UUID.
-   * @returns Promise of formatted court responses, ordered by court name.
-   */
   async findByLocation(clubId: string, role: UserRole, locationId: string) {
     const location = await this.getLocation(clubId, locationId, role);
     const courts = await this.courtRepo.find({
@@ -108,14 +82,6 @@ export class CourtsService {
     return courts.map((c) => this.toResponse(c, location));
   }
 
-  /**
-   * Loads one court and returns its effective hours and durations, which may be
-   * inherited from the parent location.
-   * @param clubId Authenticated club UUID.
-   * @param role Caller role; inactive courts are hidden from consumers.
-   * @param id Court UUID requested.
-   * @returns Promise of one formatted court response, or HTTP 404 if not visible.
-   */
   async findOne(clubId: string, role: UserRole, id: string) {
     const court = await this.getOwned(clubId, id);
     const location = await this.getLocation(clubId, court.locationId, role);
@@ -125,15 +91,6 @@ export class CourtsService {
     return this.toResponse(court, location);
   }
 
-  /**
-   * Updates court details, duration subset, or active state. It prevents removal
-   * of bookable durations when the resulting weekly schedule would have no slot.
-   * @param clubId Authenticated club UUID.
-   * @param id Court UUID to update.
-   * @param dto Partial editable court fields.
-   * @returns Promise of the saved formatted court response; duplicate names or
-   * invalid weekly schedules produce an HTTP error.
-   */
   async update(clubId: string, id: string, dto: UpdateCourtDto) {
     const court = await this.getOwned(clubId, id);
     const location = await this.getLocation(clubId, court.locationId);
@@ -175,12 +132,7 @@ export class CourtsService {
     }
   }
 
-  /**
-   * Soft-deletes a court only when it has no upcoming confirmed bookings.
-   * @param clubId Authenticated club UUID.
-   * @param id Court UUID to delete.
-   * @returns Promise<void>; throws HTTP 409 if upcoming bookings must be handled first.
-   */
+
   async remove(clubId: string, id: string) {
     await this.getOwned(clubId, id); // 404 if it is not ours
 
@@ -197,14 +149,6 @@ export class CourtsService {
 
   // ---------- Court availability (opening hours) ----------
 
-  /**
-   * Replaces custom court hours or switches the court back to inheriting location
-   * hours. Custom periods must fit inside location hours and provide feasible slots.
-   * @param clubId Authenticated club UUID.
-   * @param id Court UUID whose hours are being changed.
-   * @param dto `useLocationHours` and optional complete custom weekly schedule.
-   * @returns Promise of the court response with its effective hours and durations.
-   */
   async setOpeningHours(
     clubId: string,
     id: string,
@@ -307,12 +251,7 @@ export class CourtsService {
   // ---------- Helpers ----------
 
   // Tenant check: the court must belong to this club
-  /**
-   * Finds a court using both court id and club id, including custom opening hours.
-   * @param clubId Authenticated club UUID.
-   * @param id Court UUID to load.
-   * @returns Promise of the owned Court entity; throws HTTP 404 otherwise.
-   */
+
   private async getOwned(clubId: string, id: string): Promise<Court> {
     const court = await this.courtRepo.findOne({
       where: { id, clubId },
@@ -323,14 +262,7 @@ export class CourtsService {
   }
 
   // Tenant check: the location must belong to this club (consumers: active only)
-  /**
-   * Loads a location within the authenticated club and optionally enforces its
-   * active status for consumer-facing reads.
-   * @param clubId Authenticated club UUID.
-   * @param id Parent location UUID.
-   * @param role Optional caller role; consumers cannot use an inactive location.
-   * @returns Promise of the Location entity with weekly hours, or HTTP 404.
-   */
+
   private async getLocation(
     clubId: string,
     id: string,
@@ -347,13 +279,7 @@ export class CourtsService {
   }
 
   // Rule 5: a court can only offer durations its location offers
-  /**
-   * Resolves court durations: null/undefined means inherit all location durations;
-   * otherwise requires a subset and returns it sorted ascending.
-   * @param location Parent location and its allowed durations.
-   * @param durations Optional requested subset, or null to inherit.
-   * @returns Sorted duration subset or null for inheritance; invalid values throw HTTP 400.
-   */
+
   private resolveDurations(
     location: Location,
     durations?: number[] | null,
@@ -369,15 +295,7 @@ export class CourtsService {
     return [...durations].sort((a, b) => a - b);
   }
 
-  /**
-   * Ensures a court/location schedule intersection has a feasible weekly slot
-   * for every duration offered by this court.
-   * @param court Court being checked; its name is used in any error message.
-   * @param location Parent location with the base schedule and duration grid.
-   * @param durations Court's effective offered durations.
-   * @param courtHours Custom weekly periods, or null when inheriting location hours.
-   * @returns No value when every duration has a valid slot; otherwise HTTP 400.
-   */
+
   private assertWeeklySlots(
     court: Court,
     location: Location,
@@ -399,15 +317,7 @@ export class CourtsService {
     }
   }
 
-  /**
-   * Checks the court name is unique within its club/location, optionally excluding
-   * the current court during an update.
-   * @param clubId Club UUID defining the tenant boundary.
-   * @param locationId Parent location UUID defining the name scope.
-   * @param name Trimmed court name to check.
-   * @param exceptId Optional current court UUID to ignore.
-   * @returns Promise<void>; duplicate names throw the standard HTTP 409 exception.
-   */
+
   private async assertNameFree(
     clubId: string,
     locationId: string,
@@ -418,25 +328,14 @@ export class CourtsService {
     if (clash && clash.id !== exceptId) throw this.nameTaken(name);
   }
 
-  /**
-   * Creates the standard duplicate-court-name conflict error.
-   * @param name Duplicate court name.
-   * @returns ConflictException describing the location-scoped name conflict.
-   */
+
   private nameTaken(name: string) {
     return new ConflictException(
       `A court named "${name}" already exists in this location`,
     );
   }
 
-  /**
-   * Builds the public court response, resolving inherited hours and durations
-   * and converting stored minute offsets to HH:mm strings.
-   * @param court Court entity, optionally loaded with its custom hours.
-   * @param location Parent location entity, including inherited hours/durations.
-   * @returns Plain court response with effective durations, customDurations,
-   * usesLocationHours, openingHours, and timestamps.
-   */
+
   private toResponse(court: Court, location: Location) {
     const hours = court.useCustomHours
       ? (court.openingHours ?? [])
